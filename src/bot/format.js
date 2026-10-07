@@ -20,11 +20,12 @@ import db from '../../config/database.js';
 export function formatFramedMessage(sections = [], options = {}) {
     const settings = db.getSettings();
     const botName = options.botName || settings.botName || 'GAARA X MD';
-    const footer = options.footer || BOT_FOOTER;
+    const headerTitle = options.header || (options.botName ? `⚡ ${botName}` : (settings.headerTitle || SUPPORT_HEADER));
+    const footer = options.footer || settings.footerText || BOT_FOOTER;
 
     // Header Box
     const headerBox = [
-        `╭───[ ⚡ ${botName} ]`,
+        `╭───[ ${headerTitle} ]`,
         `│◇│`,
         `│◇│ ─────────────────`,
         `╰────────────────────`
@@ -32,8 +33,13 @@ export function formatFramedMessage(sections = [], options = {}) {
 
     // Section Boxes
     const sectionBoxes = sections.map(sec => {
-        const emoji = sec.emoji || '📌';
-        const title = sec.title || 'INFORMATION';
+        let titleString = sec.title || 'INFORMATION';
+        if (sec.emoji && !titleString.includes(sec.emoji)) {
+            titleString = `${sec.emoji} ${titleString}`;
+        }
+        // Normalize brackets if caller passed '[ 🛡️ ANTI DELETE ]'
+        titleString = titleString.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
+
         const content = Array.isArray(sec.content) ? sec.content : [sec.content];
 
         const contentLines = content
@@ -41,7 +47,7 @@ export function formatFramedMessage(sections = [], options = {}) {
             .join('\n');
 
         return [
-            `╭───[ ${emoji} ${title} ]`,
+            `╭───[ ${titleString} ]`,
             `│◇│`,
             contentLines,
             `│◇│`,
@@ -56,6 +62,30 @@ export function formatFramedMessage(sections = [], options = {}) {
     parts.push(footer);
 
     return parts.join('\n\n');
+}
+
+/**
+ * Resolves the target JID based on destination preference:
+ * 'self' | 'Self Chat' -> sends to self (Message Yourself)
+ * 'same' | 'Same Chat' -> sends to remoteJid (the chat where the event occurred)
+ */
+export function resolveDestinationJid(sock, remoteJid, destinationPreference = 'self') {
+    let selfJid = null;
+    if (sock?.user?.id) {
+        if (typeof sock.parseJid === 'function') {
+            selfJid = sock.parseJid(sock.user.id);
+        } else {
+            const raw = sock.user.id;
+            const num = raw.includes('@') ? raw.split('@')[0].split(':')[0] : raw.split(':')[0];
+            selfJid = `${num}@s.whatsapp.net`;
+        }
+    }
+
+    const isSameChat = destinationPreference === 'same' || destinationPreference === 'Same Chat';
+    if (isSameChat && remoteJid && remoteJid !== 'status@broadcast') {
+        return remoteJid;
+    }
+    return selfJid;
 }
 
 /**

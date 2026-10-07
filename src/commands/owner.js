@@ -21,19 +21,33 @@ export function isOwner(msg, senderJid) {
 
 export const ownerCommands = {
     mode: {
-        description: 'Toggle bot mode between public and private',
+        description: 'Set bot mode: public, private, groups, or inbox',
         run: async ({ sock, msg, jid, args, sender }) => {
             if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
 
-            const targetMode = args[0] ? args[0].toLowerCase() : null;
-            const current = db.getSettings().mode;
-            let nextMode = current === 'public' ? 'private' : 'public';
+            const rawMode = args[0] ? args[0].toLowerCase() : null;
+            const validModes = ['public', 'private', 'groups', 'inbox'];
+            let nextMode = 'public';
 
-            if (targetMode === 'public' || targetMode === 'private') {
-                nextMode = targetMode;
+            if (rawMode && validModes.includes(rawMode)) {
+                nextMode = rawMode;
+            } else if (rawMode === 'group' || rawMode === 'groups only') {
+                nextMode = 'groups';
+            } else if (rawMode === 'pm' || rawMode === 'inbox only') {
+                nextMode = 'inbox';
+            } else {
+                const current = db.getSettings().mode;
+                nextMode = current === 'public' ? 'private' : 'public';
             }
 
             db.updateSettings({ mode: nextMode });
+
+            const descriptions = {
+                public: 'All users and group members can use commands.',
+                private: 'Only the owner can use bot commands.',
+                groups: 'Commands can only be used in group chats.',
+                inbox: 'Commands can only be used in private / direct chats.'
+            };
 
             const text = formatFramedMessage([
                 {
@@ -41,14 +55,30 @@ export const ownerCommands = {
                     title: 'BOT MODE UPDATED',
                     content: [
                         `🌐 Current Mode: *${nextMode.toUpperCase()}*`,
-                        nextMode === 'private'
-                            ? 'Only the owner can use bot commands.'
-                            : 'All users and group members can use commands.'
+                        descriptions[nextMode] || 'Configured successfully.'
                     ]
                 }
             ]);
 
             await sock.sendMessage(jid, { text }, { quoted: msg });
+        }
+    },
+
+    antiedit: {
+        description: 'Enable or disable anti-edit message recovery',
+        run: async ({ sock, msg, jid, args, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+
+            const current = db.getSettings().antiEdit;
+            let nextVal = !current;
+            if (args[0] === 'on' || args[0] === 'enable') nextVal = true;
+            if (args[0] === 'off' || args[0] === 'disable') nextVal = false;
+
+            db.updateSettings({ antiEdit: nextVal });
+
+            await sock.sendMessage(jid, {
+                text: `✏️ *Anti-Edit Protection is now:* *${nextVal ? 'ENABLED' : 'DISABLED'}*`
+            }, { quoted: msg });
         }
     },
 

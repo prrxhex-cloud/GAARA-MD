@@ -1,9 +1,25 @@
 let token = localStorage.getItem('panel_token') || '';
+let apiBaseUrl = localStorage.getItem('api_base_url') || '';
+
+function apiUrl(endpoint) {
+    if (!apiBaseUrl) return endpoint;
+    const base = apiBaseUrl.replace(/\/+$/, '');
+    return `${base}${endpoint}`;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuthCheck();
     initTabNav();
     loadAllData();
+
+    // Live polling for real-time connection status & disconnect detection
+    setInterval(loadConnectionStatus, 3000);
+
+    // Init Backend API Base URL input
+    const apiInput = document.getElementById('apiBaseUrlInput');
+    if (apiInput) {
+        apiInput.value = apiBaseUrl;
+    }
 });
 
 function showToast(message, isError = false) {
@@ -44,7 +60,7 @@ async function initAuthCheck() {
     }
 
     try {
-        const res = await fetch('/api/auth/check', {
+        const res = await fetch(apiUrl('/api/auth/check'), {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -65,7 +81,7 @@ async function handleLogin() {
     }
 
     try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
@@ -105,27 +121,42 @@ async function loadAllData() {
 
 async function loadSettings() {
     try {
-        const res = await fetch('/api/settings', { headers: authHeaders() });
+        const res = await fetch(apiUrl('/api/settings'), { headers: authHeaders() });
         if (!res.ok) return;
         const s = await res.json();
 
-        // 01 Automation
+        // 01 Automation & Restore Destinations
+        setCheck('antiDeleteToggle', s.antiDelete !== false);
+        setVal('antiDeleteDestSelect', s.antiDeleteDestination || 'self');
+
+        setCheck('antiEditToggle', s.antiEdit !== false);
+        setVal('antiEditDestSelect', s.antiEditDestination || 'self');
+
+        setCheck('viewOnceSaverToggle', s.viewOnceSaver !== false);
+        setVal('viewOnceDestSelect', s.viewOnceDestination || 'self');
+
+        setCheck('autoStatusToggle', s.autoStatus !== false);
+        setVal('autoStatusEmoji', s.autoStatusEmoji || '💖');
+        setCheck('statusAntiDeleteToggle', s.statusAntiDelete !== false);
+        setVal('statusDestSelect', s.statusDestination || 'self');
+
+        setCheck('botLogsToggle', s.botLogs !== false);
+        setVal('botLogsDestSelect', s.botLogsDestination || 'self');
+
         setCheck('antiCallToggle', s.antiCall);
         setVal('antiCallWarnings', s.antiCallMaxWarnings);
         setVal('antiCallTemplate', s.antiCallTemplate);
-        setCheck('antiDeleteToggle', s.antiDelete);
-        setCheck('antiDeleteNotifySelf', s.antiDeleteNotifySelf);
-        setCheck('autoStatusToggle', s.autoStatus);
-        setVal('autoStatusEmoji', s.autoStatusEmoji || '💖');
+
         setCheck('autoReplyToggle', s.autoReply);
         setCheck('aiAutoReplyToggle', s.aiAutoReply);
-        setCheck('viewOnceSaverToggle', s.viewOnceSaver);
         setVal('sasaApiKeyInput', s.sasaDevApiKey || '');
 
-        // Identity & Profile
+        // 05 Identity & Profile
         setVal('botNameInput', s.botName);
         setVal('prefixInput', s.prefix);
-        setVal('modeSelect', s.mode);
+        setVal('modeSelect', s.mode || 'public');
+        setVal('headerTitleInput', s.headerTitle || 'GAARA X MD SUPPORT 🌸');
+        setVal('footerTextInput', s.footerText || 'THIS BOT BUILT BY GAARA DEV OFC.');
         setVal('logoUrlInput', s.customLogoUrl || '');
         setVal('channelUrlInput', s.channelUrl || '');
         setVal('ownerNameInput', s.ownerName);
@@ -138,28 +169,41 @@ async function loadSettings() {
 
 async function saveAutomationSettings() {
     const payload = {
+        antiDelete: getCheck('antiDeleteToggle'),
+        antiDeleteDestination: getVal('antiDeleteDestSelect'),
+
+        antiEdit: getCheck('antiEditToggle'),
+        antiEditDestination: getVal('antiEditDestSelect'),
+
+        viewOnceSaver: getCheck('viewOnceSaverToggle'),
+        viewOnceDestination: getVal('viewOnceDestSelect'),
+
+        autoStatus: getCheck('autoStatusToggle'),
+        autoStatusEmoji: getVal('autoStatusEmoji'),
+        statusAntiDelete: getCheck('statusAntiDeleteToggle'),
+        statusDestination: getVal('statusDestSelect'),
+
+        botLogs: getCheck('botLogsToggle'),
+        botLogsDestination: getVal('botLogsDestSelect'),
+
         antiCall: getCheck('antiCallToggle'),
         antiCallMaxWarnings: parseInt(getVal('antiCallWarnings') || '3', 10),
         antiCallTemplate: getVal('antiCallTemplate'),
-        antiDelete: getCheck('antiDeleteToggle'),
-        antiDeleteNotifySelf: getCheck('antiDeleteNotifySelf'),
-        autoStatus: getCheck('autoStatusToggle'),
-        autoStatusEmoji: getVal('autoStatusEmoji'),
+
         autoReply: getCheck('autoReplyToggle'),
         aiAutoReply: getCheck('aiAutoReplyToggle'),
-        viewOnceSaver: getCheck('viewOnceSaverToggle'),
         sasaDevApiKey: getVal('sasaApiKeyInput')
     };
 
     try {
-        const res = await fetch('/api/settings', {
+        const res = await fetch(apiUrl('/api/settings'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
-            showToast('✅ Automation settings saved!');
+            showToast('✅ Automation & Destination settings saved!');
         } else {
             showToast(data.error || 'Failed saving settings', true);
         }
@@ -173,6 +217,8 @@ async function saveProfileSettings() {
         botName: getVal('botNameInput'),
         prefix: getVal('prefixInput'),
         mode: getVal('modeSelect'),
+        headerTitle: getVal('headerTitleInput'),
+        footerText: getVal('footerTextInput'),
         customLogoUrl: getVal('logoUrlInput'),
         channelUrl: getVal('channelUrlInput'),
         ownerName: getVal('ownerNameInput'),
@@ -181,7 +227,7 @@ async function saveProfileSettings() {
     };
 
     try {
-        const res = await fetch('/api/settings', {
+        const res = await fetch(apiUrl('/api/settings'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify(payload)
@@ -202,7 +248,7 @@ async function saveProfileSettings() {
 // ----------------------------------------------------
 async function loadSchedules() {
     try {
-        const res = await fetch('/api/schedules', { headers: authHeaders() });
+        const res = await fetch(apiUrl('/api/schedules'), { headers: authHeaders() });
         if (!res.ok) return;
         const list = await res.json();
         const tbody = document.getElementById('schedulesTableBody');
@@ -242,7 +288,7 @@ async function addSchedule() {
     }
 
     try {
-        const res = await fetch('/api/schedules', {
+        const res = await fetch(apiUrl('/api/schedules'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({ jid, message, type, time })
@@ -264,7 +310,7 @@ async function addSchedule() {
 async function deleteSchedule(id) {
     if (!confirm('Delete this schedule?')) return;
     try {
-        await fetch(`/api/schedules/${id}`, { method: 'DELETE', headers: authHeaders() });
+        await fetch(apiUrl(`/api/schedules/${id}`), { method: 'DELETE', headers: authHeaders() });
         showToast('✅ Schedule deleted');
         loadSchedules();
     } catch {
@@ -274,7 +320,7 @@ async function deleteSchedule(id) {
 
 async function toggleSchedule(id) {
     try {
-        await fetch(`/api/schedules/${id}/toggle`, { method: 'POST', headers: authHeaders() });
+        await fetch(apiUrl(`/api/schedules/${id}/toggle`), { method: 'POST', headers: authHeaders() });
         loadSchedules();
     } catch {
         showToast('Toggle failed', true);
@@ -286,7 +332,7 @@ async function toggleSchedule(id) {
 // ----------------------------------------------------
 async function loadReplies() {
     try {
-        const res = await fetch('/api/replies', { headers: authHeaders() });
+        const res = await fetch(apiUrl('/api/replies'), { headers: authHeaders() });
         if (!res.ok) return;
         const list = await res.json();
         const tbody = document.getElementById('repliesTableBody');
@@ -323,7 +369,7 @@ async function addCustomReply() {
     }
 
     try {
-        const res = await fetch('/api/replies', {
+        const res = await fetch(apiUrl('/api/replies'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({ trigger, response, matchType })
@@ -344,7 +390,7 @@ async function addCustomReply() {
 
 async function deleteReply(id) {
     try {
-        await fetch(`/api/replies/${id}`, { method: 'DELETE', headers: authHeaders() });
+        await fetch(apiUrl(`/api/replies/${id}`), { method: 'DELETE', headers: authHeaders() });
         showToast('✅ Reply removed');
         loadReplies();
     } catch {
@@ -353,26 +399,30 @@ async function deleteReply(id) {
 }
 
 // ----------------------------------------------------
-// 03 Connection & Diagnostics
+// 03 Connection & Diagnostics (Live Polling)
 // ----------------------------------------------------
 async function loadConnectionStatus() {
     try {
-        const res = await fetch('/api/status');
+        const res = await fetch(apiUrl('/api/status'));
         const data = await res.json();
 
         const badge = document.getElementById('connStatusBadge');
         if (badge) {
-            badge.textContent = (data.connection || 'UNKNOWN').toUpperCase();
-            badge.className = `status-pill ${data.connection === 'open' ? 'status-online' : data.connection === 'connecting' ? 'status-connecting' : 'status-offline'}`;
+            const isOnline = data.connection === 'open';
+            const isOffline = data.connection === 'unlinked' || data.connection === 'disconnected';
+            const label = isOnline ? 'ONLINE' : (isOffline ? 'OFFLINE / UNLINKED' : 'CONNECTING');
+
+            badge.textContent = label;
+            badge.className = `status-pill ${isOnline ? 'status-online' : (isOffline ? 'status-offline' : 'status-connecting')}`;
         }
 
         const phoneEl = document.getElementById('connPhone');
         if (phoneEl) {
-            phoneEl.textContent = data.telemetry?.phoneNumber ? `+${data.telemetry.phoneNumber}` : 'Not linked yet';
+            phoneEl.textContent = data.telemetry?.phoneNumber ? `+${data.telemetry.phoneNumber}` : 'Not linked / Offline';
         }
 
         const platformEl = document.getElementById('connPlatform');
-        if (platformEl) platformEl.textContent = data.telemetry?.platform || 'Desktop';
+        if (platformEl) platformEl.textContent = data.telemetry?.platform || 'Windows (Desktop)';
 
         const uptimeEl = document.getElementById('connUptime');
         if (uptimeEl) {
@@ -389,20 +439,75 @@ async function loadConnectionStatus() {
         const callsEl = document.getElementById('connCalls');
         if (callsEl) callsEl.textContent = data.telemetry?.callsIntercepted || 0;
     } catch (err) {
-        console.error('Error fetching bot status', err);
+        const badge = document.getElementById('connStatusBadge');
+        if (badge) {
+            badge.textContent = 'OFFLINE / UNLINKED';
+            badge.className = 'status-pill status-offline';
+        }
     }
 }
 
 async function restartBot() {
     if (!confirm('Restart WhatsApp bot connection?')) return;
     try {
-        const res = await fetch('/api/bot/restart', { method: 'POST', headers: authHeaders() });
+        const res = await fetch(apiUrl('/api/bot/restart'), { method: 'POST', headers: authHeaders() });
         const data = await res.json();
         showToast(data.message || 'Restarting...');
         setTimeout(loadConnectionStatus, 3000);
     } catch {
         showToast('Restart failed', true);
     }
+}
+
+// ----------------------------------------------------
+// Cloudflare D1 Sync Handlers
+// ----------------------------------------------------
+async function pullFromCloudflare() {
+    showToast('☁️ Pulling persistent data from Cloudflare D1...');
+    try {
+        const res = await fetch(apiUrl('/api/sync/pull'), { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ Cloudflare D1 data restored!');
+            loadAllData();
+        } else {
+            showToast(data.reason || data.error || 'Failed pulling from Cloudflare', true);
+        }
+    } catch {
+        showToast('Cloudflare pull request failed', true);
+    }
+}
+
+async function pushToCloudflare() {
+    showToast('☁️ Pushing backup to Cloudflare D1...');
+    try {
+        const res = await fetch(apiUrl('/api/sync/push'), { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ Cloudflare D1 backup complete!');
+        } else {
+            showToast(data.reason || data.error || 'Failed pushing to Cloudflare', true);
+        }
+    } catch {
+        showToast('Cloudflare push request failed', true);
+    }
+}
+
+// ----------------------------------------------------
+// Vercel Deployment & Backend URL Handlers
+// ----------------------------------------------------
+function saveApiBaseUrl() {
+    const val = getVal('apiBaseUrlInput').trim();
+    if (!val) {
+        localStorage.removeItem('api_base_url');
+        apiBaseUrl = '';
+        showToast('✅ Backend URL reset to current origin');
+    } else {
+        localStorage.setItem('api_base_url', val);
+        apiBaseUrl = val;
+        showToast(`✅ Backend URL saved: ${val}`);
+    }
+    loadAllData();
 }
 
 // ----------------------------------------------------
@@ -416,7 +521,7 @@ async function changePassword() {
     }
 
     try {
-        const res = await fetch('/api/auth/change-password', {
+        const res = await fetch(apiUrl('/api/auth/change-password'), {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({ newPassword })
@@ -435,7 +540,7 @@ async function changePassword() {
 
 // Helpers
 function getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
-function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = (v !== undefined && v !== null) ? v : ''; }
 function getCheck(id) { const el = document.getElementById(id); return el ? el.checked : false; }
 function setCheck(id, v) { const el = document.getElementById(id); if (el) el.checked = !!v; }
 function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }

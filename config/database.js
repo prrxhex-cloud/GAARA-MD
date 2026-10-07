@@ -1,18 +1,21 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import EventEmitter from 'events';
 import bcrypt from 'bcryptjs';
 import config from './index.js';
 import { DEFAULT_SETTINGS } from './constants.js';
 
-class JsonDatabase {
+class JsonDatabase extends EventEmitter {
     constructor() {
+        super();
         this.dataDir = config.dataDir;
         this.settingsFile = path.join(this.dataDir, 'settings.json');
         this.repliesFile = path.join(this.dataDir, 'replies.json');
         this.schedulesFile = path.join(this.dataDir, 'schedules.json');
         this.callsFile = path.join(this.dataDir, 'calls.json');
         this.usersFile = path.join(this.dataDir, 'users.json');
+        this._cachedSettings = null;
 
         this.init();
     }
@@ -103,14 +106,19 @@ class JsonDatabase {
 
     // --- Settings Methods ---
     getSettings() {
-        const raw = this._readSafe(this.settingsFile, DEFAULT_SETTINGS);
-        return { ...DEFAULT_SETTINGS, ...raw };
+        if (!this._cachedSettings) {
+            const raw = this._readSafe(this.settingsFile, DEFAULT_SETTINGS);
+            this._cachedSettings = { ...DEFAULT_SETTINGS, ...raw };
+        }
+        return { ...DEFAULT_SETTINGS, ...this._cachedSettings };
     }
 
     updateSettings(partial) {
         const current = this.getSettings();
         const merged = { ...current, ...partial };
+        this._cachedSettings = merged;
         this._writeSafe(this.settingsFile, merged);
+        this.emit('settingsUpdated', merged);
         return merged;
     }
 

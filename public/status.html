@@ -84,18 +84,27 @@
     </footer>
 
     <script>
+        const apiBaseUrl = localStorage.getItem('api_base_url') || '';
+        function apiUrl(endpoint) {
+            return apiBaseUrl ? (apiBaseUrl.replace(/\/+$/, '') + endpoint) : endpoint;
+        }
+
         async function fetchLiveStats() {
             const start = performance.now();
             try {
-                const res = await fetch('/api/status');
+                const res = await fetch(apiUrl('/api/status'));
                 const latency = Math.round(performance.now() - start);
                 const data = await res.json();
 
                 const connBadge = document.getElementById('statConnection');
-                connBadge.textContent = (data.connection || 'UNKNOWN').toUpperCase();
-                connBadge.className = `status-pill ${data.connection === 'open' ? 'status-online' : data.connection === 'connecting' ? 'status-connecting' : 'status-offline'}`;
+                const isOnline = data.connection === 'open';
+                const isOffline = data.connection === 'unlinked' || data.connection === 'disconnected';
+                const label = isOnline ? 'ONLINE' : (isOffline ? 'OFFLINE / UNLINKED' : 'CONNECTING');
 
-                document.getElementById('statPhone').textContent = data.telemetry?.phoneNumber ? `+${data.telemetry.phoneNumber}` : 'None';
+                connBadge.textContent = label;
+                connBadge.className = `status-pill ${isOnline ? 'status-online' : (isOffline ? 'status-offline' : 'status-connecting')}`;
+
+                document.getElementById('statPhone').textContent = data.telemetry?.phoneNumber ? `+${data.telemetry.phoneNumber}` : 'Not linked / Offline';
                 
                 const sec = data.telemetry?.uptimeSeconds || 0;
                 const h = Math.floor(sec / 3600);
@@ -107,13 +116,16 @@
                 document.getElementById('statCalls').textContent = data.telemetry?.callsIntercepted || 0;
                 document.getElementById('statPing').textContent = `${latency} ms`;
             } catch (err) {
-                console.error('Failed to fetch status', err);
+                const connBadge = document.getElementById('statConnection');
+                connBadge.textContent = 'OFFLINE / UNLINKED';
+                connBadge.className = 'status-pill status-offline';
+                document.getElementById('statPhone').textContent = 'Not linked / Offline';
             }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchLiveStats();
-            setInterval(fetchLiveStats, 5000);
+            setInterval(fetchLiveStats, 3000);
         });
     </script>
 </body>

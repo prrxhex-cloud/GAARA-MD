@@ -1,4 +1,11 @@
 let pollTimer = null;
+const apiBaseUrl = localStorage.getItem('api_base_url') || '';
+
+function apiUrl(endpoint) {
+    if (!apiBaseUrl) return endpoint;
+    const base = apiBaseUrl.replace(/\/+$/, '');
+    return `${base}${endpoint}`;
+}
 
 async function requestPairCode() {
     const input = document.getElementById('phoneNumberInput');
@@ -16,7 +23,7 @@ async function requestPairCode() {
     }
 
     try {
-        const res = await fetch('/api/pair', {
+        const res = await fetch(apiUrl('/api/pair'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone })
@@ -61,7 +68,7 @@ function startStatusPolling() {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
         try {
-            const res = await fetch('/api/status');
+            const res = await fetch(apiUrl('/api/status'));
             const data = await res.json();
             if (data.connection === 'open') {
                 clearInterval(pollTimer);

@@ -4,6 +4,7 @@ import config from '../../config/index.js';
 import db from '../../config/database.js';
 import { getBotStatus, requestPairing, initBotSocket } from '../bot/socket.js';
 import { createSessionToken, isValidSession, requireAuth } from './auth.js';
+import cfSync from '../services/cfSync.js';
 import logger from '../utils/logger.js';
 
 export function setupRoutes(app) {
@@ -118,6 +119,11 @@ export function setupRoutes(app) {
     app.post('/api/settings', requireAuth, (req, res) => {
         try {
             const updated = db.updateSettings(req.body);
+            const status = getBotStatus();
+            const phone = status.telemetry?.phoneNumber;
+            if (phone) {
+                cfSync.saveSettingsToCloudflare(phone, updated).catch(() => {});
+            }
             res.json({ success: true, settings: updated });
         } catch (err) {
             res.status(500).json({ error: err.message });
@@ -137,11 +143,21 @@ export function setupRoutes(app) {
             return res.status(400).json({ error: 'Trigger and response are required' });
         }
         const created = db.addReply(trigger, response, matchType || 'contains');
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber;
+        if (phone) {
+            cfSync.saveRepliesToCloudflare(phone, db.getReplies()).catch(() => {});
+        }
         res.json({ success: true, reply: created });
     });
 
     app.delete('/api/replies/:id', requireAuth, (req, res) => {
         const removed = db.removeReply(req.params.id);
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber;
+        if (phone) {
+            cfSync.saveRepliesToCloudflare(phone, db.getReplies()).catch(() => {});
+        }
         res.json({ success: removed });
     });
 
@@ -158,11 +174,21 @@ export function setupRoutes(app) {
             return res.status(400).json({ error: 'Target JID/number, message, and time are required' });
         }
         const entry = db.addSchedule({ jid, message, type: type || 'daily', time });
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber;
+        if (phone) {
+            cfSync.saveSchedulesToCloudflare(phone, db.getSchedules()).catch(() => {});
+        }
         res.json({ success: true, schedule: entry });
     });
 
     app.delete('/api/schedules/:id', requireAuth, (req, res) => {
         const removed = db.removeSchedule(req.params.id);
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber;
+        if (phone) {
+            cfSync.saveSchedulesToCloudflare(phone, db.getSchedules()).catch(() => {});
+        }
         res.json({ success: removed });
     });
 
@@ -172,7 +198,35 @@ export function setupRoutes(app) {
         if (!found) return res.status(404).json({ error: 'Schedule not found' });
 
         const updated = db.updateSchedule(req.params.id, { active: !found.active });
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber;
+        if (phone) {
+            cfSync.saveSchedulesToCloudflare(phone, db.getSchedules()).catch(() => {});
+        }
         res.json({ success: true, schedule: updated });
+    });
+
+    // ==========================================
+    // Cloudflare D1 Sync Management Endpoints
+    // ==========================================
+    app.post('/api/sync/pull', requireAuth, async (req, res) => {
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber || req.body?.phone;
+        if (!phone) {
+            return res.status(400).json({ error: 'Phone number required to pull from Cloudflare D1' });
+        }
+        const result = await cfSync.syncFromCloudflare(phone);
+        res.json(result);
+    });
+
+    app.post('/api/sync/push', requireAuth, async (req, res) => {
+        const status = getBotStatus();
+        const phone = status.telemetry?.phoneNumber || req.body?.phone;
+        if (!phone) {
+            return res.status(400).json({ error: 'Phone number required to push to Cloudflare D1' });
+        }
+        const result = await cfSync.syncToCloudflare(phone);
+        res.json(result);
     });
 
     // ==========================================

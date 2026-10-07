@@ -9,17 +9,40 @@ export const DEFAULT_CHANNEL_URL = 'https://whatsapp.com/channel/gaaraxmd';
 export const DEFAULT_SETTINGS = {
     botName: 'GAARA X MD',
     prefix: '.',
-    mode: 'public', // 'public' | 'private'
+    mode: 'public', // 'public' | 'private' | 'groups' | 'inbox'
     antiCall: true,
     antiCallMaxWarnings: 3,
     antiCallTemplate: '⚠️ *CALL REJECTED*\nWarning: {warning}/3\nCaller: {caller}\n{remaining_text}',
+    
+    // Anti-Delete (messages & media)
     antiDelete: true,
+    antiDeleteDestination: 'self', // 'self' | 'same'
     antiDeleteNotifySelf: true,
+
+    // Anti-Edit (message updates)
+    antiEdit: true,
+    antiEditDestination: 'self', // 'self' | 'same'
+
+    // Anti View-Once (photos, videos, audio)
+    viewOnceSaver: true,
+    viewOnceDestination: 'self', // 'self' | 'same'
+
+    // Status Anti-Delete & Auto-Status
     autoStatus: true,
     autoStatusEmoji: '💖',
+    statusAntiDelete: true,
+    statusDestination: 'self', // 'self' | 'same'
+
+    // Bot Logs & Notifications
+    botLogs: true,
+    botLogsDestination: 'self', // 'self' | 'same'
+
+    // Header & Framing
+    headerTitle: SUPPORT_HEADER,
+    footerText: BOT_FOOTER,
+
     autoReply: false,
     aiAutoReply: false,
-    viewOnceSaver: true,
     ownerNumber: '',
     ownerName: 'GAARA DEV OFC',
     ownerBio: 'Official Developer & Creator of GAARA X MD Multi-Device WhatsApp Bot.',

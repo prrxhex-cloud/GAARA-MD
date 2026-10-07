@@ -1,10 +1,13 @@
 import db from '../../config/database.js';
 import config from '../../config/index.js';
+import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
 import { validateMessage, extractText } from '../utils/antiBug.js';
 import { cacheMessage, checkRateLimit } from './cache.js';
 import { handleRevoke } from '../handlers/antiDelete.js';
+import { handleEdit } from '../handlers/antiEdit.js';
 import { handleStatusUpdate } from '../handlers/autoStatus.js';
 import { handleAutoReply, getRandomJitter, sleep } from '../handlers/autoReply.js';
+import { formatFramedMessage, resolveDestinationJid } from './format.js';
 import { getCommand } from '../commands/index.js';
 import { isOwner } from '../commands/owner.js';
 import logger from '../utils/logger.js';
@@ -23,31 +26,38 @@ export async function handleIncomingMessage(sock, msg) {
             return;
         }
 
-        // 2. Cache incoming message for Anti-Delete & View-Once recovery
+        // 2. Cache incoming message for Anti-Delete, Anti-Edit & View-Once recovery
         cacheMessage(msg);
 
-        // 3. Revoke / Anti-Delete Check
+        // 3. Revoke / Anti-Delete Check (protocolMessage.type === 0)
         if (msg.message?.protocolMessage?.type === 0) {
             await handleRevoke(sock, msg);
             return;
         }
 
-        // 4. Status Broadcast Check (Auto-Status View & Like)
+        // 4. Edit / Anti-Edit Check (protocolMessage.type === 14)
+        if (msg.message?.protocolMessage?.type === 14) {
+            await handleEdit(sock, msg);
+            return;
+        }
+
+        // 5. Status Broadcast Check (Auto-Status View & Like)
         if (msg.key.remoteJid === 'status@broadcast') {
             await handleStatusUpdate(sock, msg);
             return;
         }
 
-        // 5. Automatic View-Once Saver
+        // 6. Automatic View-Once Saver
         const settings = db.getSettings();
         if (settings.viewOnceSaver && !msg.key.fromMe) {
             const m = msg.message;
             const isVO = m?.viewOnceMessage || m?.viewOnceMessageV2 || m?.viewOnceMessageV2Extension ||
                          m?.imageMessage?.viewOnce || m?.videoMessage?.viewOnce || m?.audioMessage?.viewOnce;
             if (isVO) {
-                logger.info({ sender: msg.key.remoteJid }, '[ViewOnce] Auto-saving View Once media to self');
-                const selfJid = sock.user?.id ? (sock.parseJid ? sock.parseJid(sock.user.id) : sock.user.id.split(':')[0] + '@s.whatsapp.net') : null;
-                if (selfJid) {
+                const destinationChoice = settings.viewOnceDestination || 'self';
+                const targetJid = resolveDestinationJid(sock, msg.key.remoteJid, destinationChoice);
+
+                if (targetJid) {
                     try {
                         const voContent = m?.viewOnceMessage?.message ||
                                           m?.viewOnceMessageV2?.message ||
@@ -60,16 +70,34 @@ export async function handleIncomingMessage(sock, msg) {
 
                         if (buffer) {
                             const senderNum = (msg.key.participant || msg.key.remoteJid).split('@')[0];
+                            const isGroup = msg.key.remoteJid.endsWith('@g.us');
+                            const chatName = isGroup ? `Group (${msg.key.remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`;
                             const innerCaption = voContent?.imageMessage?.caption || voContent?.videoMessage?.caption || '';
-                            const caption = `╭───[ ⚡ VIEW-ONCE AUTO-SAVED ]\n│◇│\n│◇│  Sender: @${senderNum}\n${innerCaption ? `│◇│  Caption: ${innerCaption}\n` : ''}│◇│\n╰────────────────────\n\nTHIS BOT BUILT BY GAARA DEV OFC.`;
+                            const mediaKind = voContent?.imageMessage ? 'IMAGE' : voContent?.videoMessage ? 'VIDEO' : 'AUDIO';
+
+                            const caption = formatFramedMessage([
+                                {
+                                    title: '[ 📷 MEDIA RECOVERED ]',
+                                    content: [
+                                        `👤 *Sender:* @${senderNum}`,
+                                        `💬 *Chat:* ${chatName}`,
+                                        `📦 *Type:* VIEW-ONCE ${mediaKind}`,
+                                        innerCaption ? `📝 *Caption:* ${innerCaption}` : ''
+                                    ].filter(Boolean)
+                                }
+                            ], {
+                                header: settings.headerTitle || SUPPORT_HEADER,
+                                footer: settings.footerText || BOT_FOOTER
+                            });
 
                             if (voContent?.imageMessage) {
-                                await sock.sendMessage(selfJid, { image: buffer, caption, mentions: [msg.key.participant || msg.key.remoteJid] });
+                                await sock.sendMessage(targetJid, { image: buffer, caption, mentions: [msg.key.participant || msg.key.remoteJid] });
                             } else if (voContent?.videoMessage) {
-                                await sock.sendMessage(selfJid, { video: buffer, caption, mentions: [msg.key.participant || msg.key.remoteJid] });
+                                await sock.sendMessage(targetJid, { video: buffer, caption, mentions: [msg.key.participant || msg.key.remoteJid] });
                             } else if (voContent?.audioMessage) {
-                                await sock.sendMessage(selfJid, { audio: buffer, ptt: false });
+                                await sock.sendMessage(targetJid, { audio: buffer, ptt: false });
                             }
+                            logger.info({ sender: senderNum, destination: destinationChoice }, '[ViewOnce] Auto-saved View Once media');
                         }
                     } catch (voErr) {
                         logger.warn({ err: voErr.message }, '[ViewOnce] Auto-save error');
@@ -78,7 +106,7 @@ export async function handleIncomingMessage(sock, msg) {
             }
         }
 
-        // 6. Extract text and identify prefix
+        // 7. Extract text and identify prefix
         const rawText = extractText(msg).trim();
         if (!rawText) return;
 
@@ -86,7 +114,7 @@ export async function handleIncomingMessage(sock, msg) {
         const sender = msg.key.participant || remoteJid;
         const prefix = settings.prefix || '.';
 
-        // 7. Check if message is a command
+        // 8. Check if message is a command
         if (rawText.startsWith(prefix)) {
             // Anti-Spam Rate Limiter
             if (!checkRateLimit(sender)) {
@@ -101,13 +129,31 @@ export async function handleIncomingMessage(sock, msg) {
 
             const cmd = getCommand(cmdName);
             if (cmd) {
-                // Check Bot Mode (private vs public)
-                if (settings.mode === 'private' && !isOwner(msg, sender)) {
-                    await sock.sendMessage(remoteJid, { text: '🔒 Bot is currently in PRIVATE mode. Only the owner can execute commands.' }, { quoted: msg });
-                    return;
+                // Check Bot Modes: 'public', 'private', 'groups', 'inbox'
+                const mode = (settings.mode || 'public').toLowerCase();
+                const isSenderOwner = isOwner(msg, sender);
+                const isGroupChat = remoteJid.endsWith('@g.us');
+
+                if (!isSenderOwner) {
+                    if (mode === 'private') {
+                        await sock.sendMessage(remoteJid, { text: '🔒 Bot is currently in PRIVATE mode. Only the owner can execute commands.' }, { quoted: msg });
+                        return;
+                    }
+                    if (mode === 'groups' || mode === 'groups only') {
+                        if (!isGroupChat) {
+                            await sock.sendMessage(remoteJid, { text: '🔒 Bot is currently in GROUPS ONLY mode. Commands are disabled in private chats.' }, { quoted: msg });
+                            return;
+                        }
+                    }
+                    if (mode === 'inbox' || mode === 'inbox only') {
+                        if (isGroupChat) {
+                            await sock.sendMessage(remoteJid, { text: '🔒 Bot is currently in INBOX ONLY mode. Commands are disabled in groups.' }, { quoted: msg });
+                            return;
+                        }
+                    }
                 }
 
-                logger.info({ cmd: cmdName, sender: sender.split('@')[0], isGroup: remoteJid.endsWith('@g.us') }, '[Command] Executing');
+                logger.info({ cmd: cmdName, sender: sender.split('@')[0], isGroup: isGroupChat, mode }, '[Command] Executing');
 
                 // Anti-Ban Safeguard: Humanized Response Jitter (1.2s - 2.8s)
                 const delay = getRandomJitter();
@@ -123,7 +169,7 @@ export async function handleIncomingMessage(sock, msg) {
             }
         }
 
-        // 8. If not a command, dispatch to Smart Auto-Reply
+        // 9. If not a command, dispatch to Smart Auto-Reply
         await handleAutoReply(sock, msg);
     } catch (err) {
         logger.error({ err: err.message }, '[Handler] Fatal unhandled error in message handler');

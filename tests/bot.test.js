@@ -2,7 +2,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import db from '../config/database.js';
 import { validateMessage, extractText } from '../src/utils/antiBug.js';
-import { formatFramedMessage, formatConnectedSetupMessage } from '../src/bot/format.js';
+import { formatFramedMessage, formatConnectedSetupMessage, resolveDestinationJid } from '../src/bot/format.js';
+import { cacheMessage, getCachedMessage } from '../src/bot/cache.js';
+import { handleEdit } from '../src/handlers/antiEdit.js';
+import { handleRevoke } from '../src/handlers/antiDelete.js';
+import cfSync from '../src/services/cfSync.js';
+import worker from '../worker/index.js';
+import { getBotStatus } from '../src/bot/socket.js';
+import { handleIncomingMessage } from '../src/bot/handler.js';
 import { allCommandCategories, commandMap, getCommand } from '../src/commands/index.js';
 import { createServer } from '../src/server/app.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../config/constants.js';
@@ -148,7 +155,7 @@ describe('4. Expanded Command Library Coverage', () => {
         // Customization
         'setbotname', 'setbotlogo', 'addreply', 'delreply', 'listreply', 'clearreplies',
         // Owner Controls
-        'mode', 'anticall', 'antidelete', 'autostatus', 'block', 'unblock', 'broadcast', 'setprefix', 'eval', 'exec', 'clearcache', 'restart', 'join'
+        'mode', 'antiedit', 'anticall', 'antidelete', 'autostatus', 'block', 'unblock', 'broadcast', 'setprefix', 'eval', 'exec', 'clearcache', 'restart', 'join'
     ];
 
     for (const cmd of requiredCommands) {
@@ -207,5 +214,364 @@ describe('5. Express Server & Keepalive Endpoints', () => {
         } finally {
             server.close();
         }
+    });
+});
+
+describe('6. Anti-Edit, Configurable Destinations & Multi-Cloud Tests', () => {
+    test('resolveDestinationJid routes correctly for Self Chat vs Same Chat', () => {
+        const mockSock = {
+            user: { id: '94770000000:1@s.whatsapp.net' },
+            parseJid: (id) => id.split(':')[0] + '@s.whatsapp.net'
+        };
+
+        const remoteChat = '123456789-group@g.us';
+
+        // 1. Destination 'self'
+        assert.equal(resolveDestinationJid(mockSock, remoteChat, 'self'), '94770000000@s.whatsapp.net');
+        assert.equal(resolveDestinationJid(mockSock, remoteChat, 'Self Chat'), '94770000000@s.whatsapp.net');
+
+        // 2. Destination 'same'
+        assert.equal(resolveDestinationJid(mockSock, remoteChat, 'same'), remoteChat);
+        assert.equal(resolveDestinationJid(mockSock, remoteChat, 'Same Chat'), remoteChat);
+
+        // 3. Status broadcast fallback to self
+        assert.equal(resolveDestinationJid(mockSock, 'status@broadcast', 'same'), '94770000000@s.whatsapp.net');
+    });
+
+    test('Anti-Edit recovers edited messages and produces original vs edited comparison', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        // Cache original message
+        const originalMsg = {
+            key: { id: 'msg-to-edit-123', remoteJid: '94771112233@s.whatsapp.net', fromMe: false },
+            pushName: 'TestUser',
+            message: { conversation: 'This is the original text before edit' },
+            messageTimestamp: 1760000000
+        };
+        cacheMessage(originalMsg);
+
+        // Configure anti-edit to same chat
+        db.updateSettings({ antiEdit: true, antiEditDestination: 'same' });
+
+        // Simulate incoming edit protocol message
+        const editMsg = {
+            key: { id: 'edit-protocol-1', remoteJid: '94771112233@s.whatsapp.net', fromMe: false },
+            message: {
+                protocolMessage: {
+                    type: 14, // MESSAGE_EDIT
+                    key: { id: 'msg-to-edit-123', remoteJid: '94771112233@s.whatsapp.net', fromMe: false },
+                    editedMessage: { conversation: 'This is the updated NEW text after edit' }
+                }
+            },
+            messageTimestamp: 1760000060
+        };
+
+        await handleEdit(mockSock, editMsg);
+
+        assert.equal(mockSock.sentMessages.length, 1);
+        const sent = mockSock.sentMessages[0];
+        assert.equal(sent.jid, '94771112233@s.whatsapp.net');
+        assert.ok(sent.content.text.includes('[ ✏️ MESSAGE EDITED ]'));
+        assert.ok(sent.content.text.includes('This is the original text before edit'));
+        assert.ok(sent.content.text.includes('This is the updated NEW text after edit'));
+        assert.ok(sent.content.text.includes(BOT_FOOTER));
+
+        // Check that cache was updated with the new edited message
+        const updatedCache = getCachedMessage('msg-to-edit-123');
+        assert.equal(updatedCache.message.conversation, 'This is the updated NEW text after edit');
+    });
+
+    test('Anti-Delete recovers message to configured destination', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        // Cache original message
+        const msgToDelete = {
+            key: { id: 'msg-to-delete-456', remoteJid: '94779998877@s.whatsapp.net', fromMe: false },
+            pushName: 'DeleteTester',
+            message: { conversation: 'I will be deleted soon' },
+            messageTimestamp: 1760000100
+        };
+        cacheMessage(msgToDelete);
+
+        // Configure anti-delete to self chat
+        db.updateSettings({ antiDelete: true, antiDeleteDestination: 'self' });
+
+        // Simulate revoke protocol message
+        const revokeMsg = {
+            key: { id: 'revoke-protocol-1', remoteJid: '94779998877@s.whatsapp.net', fromMe: false },
+            message: {
+                protocolMessage: {
+                    type: 0, // REVOKE
+                    key: { id: 'msg-to-delete-456', remoteJid: '94779998877@s.whatsapp.net', fromMe: false }
+                }
+            }
+        };
+
+        await handleRevoke(mockSock, revokeMsg);
+
+        assert.equal(mockSock.sentMessages.length, 1);
+        const sent = mockSock.sentMessages[0];
+        assert.equal(sent.jid, '94770000000@s.whatsapp.net');
+        assert.ok(sent.content.text.includes('[ 🛡️ ANTI DELETE ]'));
+        assert.ok(sent.content.text.includes('I will be deleted soon'));
+        assert.ok(sent.content.text.includes(BOT_FOOTER));
+    });
+
+    test('Database updateSettings immediately syncs in-memory without lag', () => {
+        let eventFired = false;
+        let eventPayload = null;
+
+        const listener = (newSettings) => {
+            eventFired = true;
+            eventPayload = newSettings;
+        };
+
+        db.on('settingsUpdated', listener);
+
+        const updated = db.updateSettings({ mode: 'groups', antiEdit: true, headerTitle: 'TEST HEADER' });
+        assert.equal(db.getSettings().mode, 'groups');
+        assert.equal(db.getSettings().headerTitle, 'TEST HEADER');
+        assert.ok(eventFired);
+        assert.equal(eventPayload.mode, 'groups');
+
+        db.removeListener('settingsUpdated', listener);
+    });
+
+    test('cfSync exports complete persistent API without throwing when offline', async () => {
+        assert.equal(typeof cfSync.syncFromCloudflare, 'function');
+        assert.equal(typeof cfSync.syncToCloudflare, 'function');
+        assert.equal(typeof cfSync.saveSettingsToCloudflare, 'function');
+        assert.equal(typeof cfSync.saveSchedulesToCloudflare, 'function');
+        assert.equal(typeof cfSync.saveRepliesToCloudflare, 'function');
+        assert.equal(typeof cfSync.fetchSecretsFromCloudflare, 'function');
+
+        // Test with offline phone, should catch and return safe object
+        const res = await cfSync.syncFromCloudflare('94779999999');
+        assert.equal(typeof res, 'object');
+    });
+
+    test('Cloudflare Worker exports valid fetch handler with CORS and health check', async () => {
+        assert.ok(worker);
+        assert.equal(typeof worker.fetch, 'function');
+
+        // Test CORS preflight OPTIONS
+        const optionsReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/health', {
+            method: 'OPTIONS'
+        });
+        const optionsRes = await worker.fetch(optionsReq, {}, {});
+        assert.equal(optionsRes.status, 204);
+        assert.equal(optionsRes.headers.get('Access-Control-Allow-Origin'), '*');
+
+        // Test Health GET
+        const healthReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/health', {
+            method: 'GET'
+        });
+        const healthRes = await worker.fetch(healthReq, {}, {});
+        assert.equal(healthRes.status, 200);
+        const healthData = await healthRes.json();
+        assert.equal(healthData.status, 'ok');
+        assert.equal(healthData.service, 'ofc');
+    });
+
+    test('Cloudflare Worker handles Bearer auth and full D1 REST operations', async () => {
+        const mockDb = {
+            tables: {
+                user_settings: new Map(),
+                user_schedules: new Map(),
+                user_replies: new Map(),
+                secrets: new Map([['TEST_KEY', 'secret_val_123']])
+            },
+            prepare(query) {
+                return {
+                    bind(...args) {
+                        return {
+                            async first() {
+                                if (query.includes('FROM user_settings')) {
+                                    const row = mockDb.tables.user_settings.get(args[0]);
+                                    return row ? { settings_json: row, updated_at: '2026-10-07T12:00:00Z' } : null;
+                                }
+                                return null;
+                            },
+                            async all() {
+                                if (query.includes('FROM user_schedules')) {
+                                    const list = Array.from(mockDb.tables.user_schedules.values()).filter(x => x.phone === args[0]);
+                                    return { results: list };
+                                }
+                                if (query.includes('FROM user_replies')) {
+                                    const list = Array.from(mockDb.tables.user_replies.values()).filter(x => x.phone === args[0]);
+                                    return { results: list };
+                                }
+                                if (query.includes('FROM secrets')) {
+                                    const list = Array.from(mockDb.tables.secrets.entries()).map(([k, v]) => ({ key: k, value: v }));
+                                    return { results: list };
+                                }
+                                return { results: [] };
+                            },
+                            async run() {
+                                if (query.includes('INSERT INTO user_settings')) {
+                                    mockDb.tables.user_settings.set(args[0], args[1]);
+                                }
+                                if (query.includes('INSERT INTO user_schedules')) {
+                                    mockDb.tables.user_schedules.set(args[0], { id: args[0], phone: args[1], jid: args[2], message: args[3], type: args[4], time: args[5], active: args[6] });
+                                }
+                                if (query.includes('INSERT INTO user_replies')) {
+                                    mockDb.tables.user_replies.set(args[0], { id: args[0], phone: args[1], trigger: args[2], response: args[3], matchType: args[4], enabled: args[5] });
+                                }
+                                return { success: true };
+                            }
+                        };
+                    },
+                    async all() {
+                        if (query.includes('FROM secrets')) {
+                            const list = Array.from(mockDb.tables.secrets.entries()).map(([k, v]) => ({ key: k, value: v }));
+                            return { results: list };
+                        }
+                        return { results: [] };
+                    }
+                };
+            }
+        };
+
+        const mockEnv = { D1: mockDb };
+
+        // 1. Unauthorized when no Bearer token
+        const unauthReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/settings');
+        const unauthRes = await worker.fetch(unauthReq, mockEnv, {});
+        assert.equal(unauthRes.status, 401);
+
+        const authHeaders = {
+            'Authorization': 'Bearer test-token-2026',
+            'Content-Type': 'application/json'
+        };
+
+        // 2. Settings POST (upsert)
+        const postSettingsReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/settings', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ botName: 'GAARA CLOUD', mode: 'public' })
+        });
+        const postSettingsRes = await worker.fetch(postSettingsReq, mockEnv, {});
+        assert.equal(postSettingsRes.status, 200);
+
+        // 3. Settings GET
+        const getSettingsReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/settings', {
+            method: 'GET',
+            headers: authHeaders
+        });
+        const getSettingsRes = await worker.fetch(getSettingsReq, mockEnv, {});
+        assert.equal(getSettingsRes.status, 200);
+        const settingsBody = await getSettingsRes.json();
+        assert.equal(settingsBody.settings.botName, 'GAARA CLOUD');
+
+        // 4. Schedules POST & GET
+        const postSchedReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/schedules', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify([{ id: 'sc-1', jid: '12345@s.whatsapp.net', message: 'Test Alarm', time: '08:00' }])
+        });
+        const postSchedRes = await worker.fetch(postSchedReq, mockEnv, {});
+        assert.equal(postSchedRes.status, 200);
+
+        const getSchedReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/schedules', {
+            method: 'GET',
+            headers: authHeaders
+        });
+        const getSchedRes = await worker.fetch(getSchedReq, mockEnv, {});
+        assert.equal(getSchedRes.status, 200);
+        const schedBody = await getSchedRes.json();
+        assert.equal(schedBody.schedules.length, 1);
+        assert.equal(schedBody.schedules[0].message, 'Test Alarm');
+
+        // 5. Replies POST & GET
+        const postRepReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/replies', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify([{ id: 'rep-1', trigger: 'help me', response: 'Sure!', matchType: 'exact' }])
+        });
+        const postRepRes = await worker.fetch(postRepReq, mockEnv, {});
+        assert.equal(postRepRes.status, 200);
+
+        const getRepReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/user/94771234567/replies', {
+            method: 'GET',
+            headers: authHeaders
+        });
+        const getRepRes = await worker.fetch(getRepReq, mockEnv, {});
+        assert.equal(getRepRes.status, 200);
+        const repBody = await getRepRes.json();
+        assert.equal(repBody.replies.length, 1);
+        assert.equal(repBody.replies[0].trigger, 'help me');
+
+        // 6. Secrets GET
+        const getSecretsReq = new Request('https://ofc.sayurusenavirathna70.workers.dev/api/secrets', {
+            method: 'GET',
+            headers: authHeaders
+        });
+        const getSecretsRes = await worker.fetch(getSecretsReq, mockEnv, {});
+        assert.equal(getSecretsRes.status, 200);
+        const secretsBody = await getSecretsRes.json();
+        assert.equal(secretsBody.secrets.length, 1);
+        assert.equal(secretsBody.secrets[0].key, 'TEST_KEY');
+    });
+
+    test('Bot modes restrict non-owner command usage appropriately', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const groupMsg = {
+            key: { id: 'cmd-grp', remoteJid: '123456@g.us', participant: '94779999999@s.whatsapp.net', fromMe: false },
+            message: { conversation: '.ping' }
+        };
+
+        const privateMsg = {
+            key: { id: 'cmd-pvt', remoteJid: '94779999999@s.whatsapp.net', fromMe: false },
+            message: { conversation: '.ping' }
+        };
+
+        // 1. Mode 'groups': reject private chat for non-owner
+        db.updateSettings({ mode: 'groups', ownerNumber: '94770000000' });
+        mockSock.sentMessages = [];
+        await handleIncomingMessage(mockSock, privateMsg);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text.includes('GROUPS ONLY')));
+
+        // 2. Mode 'inbox': reject group chat for non-owner
+        db.updateSettings({ mode: 'inbox', ownerNumber: '94770000000' });
+        mockSock.sentMessages = [];
+        await handleIncomingMessage(mockSock, groupMsg);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text.includes('INBOX ONLY')));
+
+        // 3. Mode 'private': reject any chat for non-owner
+        db.updateSettings({ mode: 'private', ownerNumber: '94770000000' });
+        mockSock.sentMessages = [];
+        await handleIncomingMessage(mockSock, groupMsg);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text.includes('PRIVATE')));
+    });
+
+    test('getBotStatus telemetry reflects live status and OFFLINE / UNLINKED states', () => {
+        const status = getBotStatus();
+        assert.ok('connection' in status);
+        assert.ok('isLinked' in status);
+        assert.ok('statusText' in status);
+        assert.ok('telemetry' in status);
+        assert.ok(typeof status.statusText === 'string');
     });
 });

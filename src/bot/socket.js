@@ -7,16 +7,18 @@ import {
 import path from 'path';
 import config from '../../config/index.js';
 import db from '../../config/database.js';
+import cfSync from '../services/cfSync.js';
 import { baileysLogger } from '../utils/logger.js';
 import logger from '../utils/logger.js';
 import { handleIncomingMessage } from './handler.js';
+import { handleEdit } from '../handlers/antiEdit.js';
 import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
 import { formatConnectedSetupMessage } from './format.js';
 
 let sockInstance = null;
 let currentPairingCode = null;
-let connectionState = 'connecting'; // 'disconnected' | 'connecting' | 'open'
+let connectionState = 'connecting'; // 'disconnected' | 'connecting' | 'open' | 'unlinked'
 let botTelemetry = {
     connectedAt: null,
     phoneNumber: null,
@@ -27,8 +29,14 @@ let botTelemetry = {
 };
 
 export function getBotStatus() {
+    const isOnline = connectionState === 'open';
+    const isOfflineOrUnlinked = connectionState === 'unlinked' || connectionState === 'disconnected';
+    const statusText = isOnline ? 'ONLINE' : (isOfflineOrUnlinked ? 'OFFLINE / UNLINKED' : 'CONNECTING');
+
     return {
         connection: connectionState,
+        isLinked: isOnline,
+        statusText,
         pairingCode: currentPairingCode,
         telemetry: {
             ...botTelemetry,
@@ -40,6 +48,15 @@ export function getBotStatus() {
 export function getSocket() {
     return sockInstance;
 }
+
+// Runtime sync listener: push settings updates immediately to Cloudflare D1
+db.on('settingsUpdated', async (newSettings) => {
+    try {
+        if (botTelemetry.phoneNumber) {
+            cfSync.saveSettingsToCloudflare(botTelemetry.phoneNumber, newSettings).catch(() => {});
+        }
+    } catch {}
+});
 
 /**
  * Initializes the GAARA X MD Baileys WhatsApp Socket.
@@ -93,6 +110,15 @@ export async function initBotSocket() {
 
                 logger.info({ phone }, '[Bot] GAARA X MD Connected Successfully!');
 
+                // Cloudflare D1 Persistent Restore (Settings & Data restored by phone)
+                if (phone && phone !== 'Unknown') {
+                    try {
+                        await cfSync.syncFromCloudflare(phone);
+                    } catch (cfErr) {
+                        logger.warn({ err: cfErr.message }, '[Bot] Cloudflare restore skipped');
+                    }
+                }
+
                 // Start message scheduler
                 startScheduler(sock);
 
@@ -101,15 +127,20 @@ export async function initBotSocket() {
             }
 
             if (connection === 'close') {
-                connectionState = 'disconnected';
                 stopScheduler();
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+                const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
                 logger.warn({ statusCode, isLoggedOut }, '[Bot] Connection closed');
 
                 if (isLoggedOut) {
-                    logger.error('[Bot] Device logged out. Please re-pair via dashboard /pair');
+                    connectionState = 'unlinked';
+                    botTelemetry.phoneNumber = null;
+                    botTelemetry.connectedAt = null;
+                    logger.error('[Bot] Device logged out / unlinked. Please re-pair via dashboard /pair');
+                } else {
+                    connectionState = 'disconnected';
+                    botTelemetry.connectedAt = null;
                 }
             }
         });
@@ -120,6 +151,20 @@ export async function initBotSocket() {
             for (const msg of messages) {
                 botTelemetry.messagesHandled++;
                 await handleIncomingMessage(sock, msg);
+            }
+        });
+
+        // Message updates listener (edits & protocol updates)
+        sock.ev.on('messages.update', async (updates) => {
+            if (!Array.isArray(updates)) return;
+            for (const update of updates) {
+                if (update.update?.message?.protocolMessage?.type === 14) {
+                    await handleEdit(sock, {
+                        key: update.key,
+                        message: update.update.message,
+                        messageTimestamp: update.update.messageTimestamp || Math.floor(Date.now() / 1000)
+                    });
+                }
             }
         });
 
@@ -192,7 +237,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
             try {
                 await sock.sendButton(selfJid, {
                     text: setupText,
-                    footer: 'THIS BOT BUILT BY GAARA DEV OFC.',
+                    footer: settings.footerText || 'THIS BOT BUILT BY GAARA DEV OFC.',
                     buttons: [
                         { text: '📋 COPY PASSWORD', copy: panelPass },
                         { text: 'View channel', url: channelUrl }

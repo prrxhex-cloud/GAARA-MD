@@ -38,7 +38,7 @@
                 <span>05</span> 👑 Identity & Profile
             </button>
             <button class="tab-btn" data-tab="tab-security">
-                <span>06</span> 🔒 Security
+                <span>06</span> 🔒 Security & Cloud
             </button>
         </div>
 
@@ -47,6 +47,155 @@
              ============================================== -->
         <div id="tab-automation" class="tab-content active">
             <div class="card-grid">
+                <!-- Anti-Delete Card -->
+                <div class="card">
+                    <h2 class="card-title">🗑️ Anti-Delete Recovery</h2>
+                    <p class="card-desc">Caches incoming messages and media; if deleted for everyone, recovers text and media to the selected destination.</p>
+
+                    <div class="control-row">
+                        <div>
+                            <div class="control-label">Enable Anti-Delete</div>
+                            <div class="control-sublabel">Recover deleted text and media</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="antiDeleteToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label class="input-label">Restore Destination:</label>
+                        <select id="antiDeleteDestSelect">
+                            <option value="self">Self Chat (Message Yourself)</option>
+                            <option value="same">Same Chat (Where message was deleted)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Anti-Edit Card -->
+                <div class="card">
+                    <h2 class="card-title">✏️ Anti-Edit Protection</h2>
+                    <p class="card-desc">Detects edited messages, compares original vs new message text from cache, and posts comparison.</p>
+
+                    <div class="control-row">
+                        <div>
+                            <div class="control-label">Enable Anti-Edit</div>
+                            <div class="control-sublabel">Catch and log edited messages</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="antiEditToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label class="input-label">Restore Destination:</label>
+                        <select id="antiEditDestSelect">
+                            <option value="self">Self Chat (Message Yourself)</option>
+                            <option value="same">Same Chat (Where message was edited)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- View-Once Saver Card -->
+                <div class="card">
+                    <h2 class="card-title">📷 Anti View-Once Saver</h2>
+                    <p class="card-desc">Automatically intercepts and saves View Once photos, videos, and voice notes before expiration.</p>
+
+                    <div class="control-row">
+                        <div>
+                            <div class="control-label">Auto-Save View Once</div>
+                            <div class="control-sublabel">Download ephemeral media permanently</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="viewOnceSaverToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label class="input-label">Restore Destination:</label>
+                        <select id="viewOnceDestSelect">
+                            <option value="self">Self Chat (Message Yourself)</option>
+                            <option value="same">Same Chat (Where received)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Auto-Status & Status Anti-Delete Card -->
+                <div class="card">
+                    <h2 class="card-title">💖 Status Automations</h2>
+                    <p class="card-desc">Auto-view and like contact stories, plus recover deleted statuses.</p>
+
+                    <div class="control-row">
+                        <div>
+                            <div class="control-label">Auto-Status Viewer</div>
+                            <div class="control-sublabel">Mark new status updates as read & like</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="autoStatusToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 0.8rem;">
+                        <label class="input-label">Reaction Emoji:</label>
+                        <select id="autoStatusEmoji">
+                            <option value="💖">💖 Sparkling Pink Heart (Default)</option>
+                            <option value="❤️">❤️ Red Heart</option>
+                            <option value="🔥">🔥 Fire</option>
+                            <option value="👍">👍 Thumbs Up</option>
+                            <option value="🌸">🌸 Cherry Blossom</option>
+                            <option value="⚡">⚡ Lightning Bolt</option>
+                            <option value="🌟">🌟 Glowing Star</option>
+                        </select>
+                    </div>
+
+                    <div class="control-row" style="margin-top: 0.8rem;">
+                        <div>
+                            <div class="control-label">Status Anti-Delete</div>
+                            <div class="control-sublabel">Save status media if sender deletes it</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="statusAntiDeleteToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 0.8rem;">
+                        <label class="input-label">Status Restore Destination:</label>
+                        <select id="statusDestSelect">
+                            <option value="self">Self Chat (Message Yourself)</option>
+                            <option value="same">Same Chat</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Bot Logs & Notifications Card -->
+                <div class="card">
+                    <h2 class="card-title">📜 Bot Logs & Notifications</h2>
+                    <p class="card-desc">Configure where system connection events, restarts, and alerts are dispatched.</p>
+
+                    <div class="control-row">
+                        <div>
+                            <div class="control-label">Enable Bot Event Logs</div>
+                            <div class="control-sublabel">Dispatch socket connection & pairing logs</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="botLogsToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label class="input-label">Log Notification Destination:</label>
+                        <select id="botLogsDestSelect">
+                            <option value="self">Self Chat (Message Yourself)</option>
+                            <option value="same">Same Chat</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Anti-Call Card -->
                 <div class="card">
                     <h2 class="card-title">📵 Anti-Call Protection</h2>
@@ -71,75 +220,6 @@
                     <div class="input-group">
                         <label class="input-label">Warning Message Template:</label>
                         <textarea id="antiCallTemplate" rows="3" placeholder="Use {warning}, {caller}, {remaining_text}"></textarea>
-                    </div>
-                </div>
-
-                <!-- Anti-Delete Card -->
-                <div class="card">
-                    <h2 class="card-title">🗑️ Anti-Delete Recovery</h2>
-                    <p class="card-desc">Caches incoming messages and media; if a message is deleted for everyone, it is recovered and reposted to 'Message Yourself'.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Enable Anti-Delete</div>
-                            <div class="control-sublabel">Recover deleted text and media</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="antiDeleteToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Notify in 'Message Yourself'</div>
-                            <div class="control-sublabel">Send recovered messages to your private chat</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="antiDeleteNotifySelf">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">View Once Media Saver</div>
-                            <div class="control-sublabel">Auto-save View Once media directly to yourself</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="viewOnceSaverToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Auto-Status Card -->
-                <div class="card">
-                    <h2 class="card-title">💖 Auto-Status View & Like</h2>
-                    <p class="card-desc">Automatically view contact status stories and react with your favorite emoji.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Auto-Status Viewer</div>
-                            <div class="control-sublabel">Mark new status updates as read</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="autoStatusToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Reaction Emoji:</label>
-                        <select id="autoStatusEmoji">
-                            <option value="💖">💖 Sparkling Pink Heart (Default)</option>
-                            <option value="❤️">❤️ Red Heart</option>
-                            <option value="🔥">🔥 Fire</option>
-                            <option value="👍">👍 Thumbs Up</option>
-                            <option value="🌸">🌸 Cherry Blossom</option>
-                            <option value="⚡">⚡ Lightning Bolt</option>
-                            <option value="🌟">🌟 Glowing Star</option>
-                        </select>
                     </div>
                 </div>
 
@@ -177,7 +257,7 @@
                 </div>
             </div>
 
-            <div style="text-align: right;">
+            <div style="text-align: right; margin-top: 1.5rem;">
                 <button class="btn" onclick="saveAutomationSettings()">💾 SAVE AUTOMATION SETTINGS</button>
             </div>
         </div>
@@ -246,7 +326,7 @@
             <div class="card-grid">
                 <div class="card">
                     <h2 class="card-title">📶 Connection Status</h2>
-                    <p class="card-desc">Live Baileys WebSocket telemetry and device health.</p>
+                    <p class="card-desc">Live Baileys WebSocket telemetry and device health (live polling active).</p>
 
                     <div class="control-row">
                         <div class="control-label">Status:</div>
@@ -273,7 +353,7 @@
                         <div id="connCalls" style="color: var(--danger); font-weight: 700;">0</div>
                     </div>
 
-                    <div style="margin-top: 1.5rem; display: flex; gap: 0.8rem;">
+                    <div style="margin-top: 1.5rem; display: flex; gap: 0.8rem; flex-wrap: wrap;">
                         <button class="btn btn-secondary" onclick="restartBot()">🔄 Restart Bot</button>
                         <a href="/pair" class="btn">📲 Re-Pair / Link</a>
                     </div>
@@ -365,7 +445,7 @@
         <div id="tab-profile" class="tab-content">
             <div class="card">
                 <h2 class="card-title">👑 Bot Identity & Owner Profile</h2>
-                <p class="card-desc">Customize how your bot presents itself across all chats and within AI auto-replies.</p>
+                <p class="card-desc">Customize how your bot presents itself across chats, framing boxes, and AI auto-replies.</p>
 
                 <div class="card-grid">
                     <div>
@@ -380,9 +460,19 @@
                         <div class="input-group">
                             <label class="input-label">Bot Mode:</label>
                             <select id="modeSelect">
-                                <option value="public">Public (Everyone can use commands)</option>
-                                <option value="private">Private (Only owner can use commands)</option>
+                                <option value="public">Public</option>
+                                <option value="private">Private</option>
+                                <option value="groups">Groups only</option>
+                                <option value="inbox">Inbox only</option>
                             </select>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Header Framing Box Title:</label>
+                            <input type="text" id="headerTitleInput" placeholder="GAARA X MD SUPPORT 🌸">
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Footer Framing Box Text:</label>
+                            <input type="text" id="footerTextInput" placeholder="THIS BOT BUILT BY GAARA DEV OFC.">
                         </div>
                         <div class="input-group">
                             <label class="input-label">Bot Logo Image URL:</label>
@@ -405,7 +495,7 @@
                         </div>
                         <div class="input-group">
                             <label class="input-label">Owner Bio / Context for AI:</label>
-                            <textarea id="ownerBioInput" rows="3" placeholder="Developer description used by AI assistant..."></textarea>
+                            <textarea id="ownerBioInput" rows="4" placeholder="Developer description used by AI assistant..."></textarea>
                         </div>
                     </div>
                 </div>
@@ -417,19 +507,52 @@
         </div>
 
         <!-- ==============================================
-             06 SECURITY TAB
+             06 SECURITY & CLOUD TAB
              ============================================== -->
         <div id="tab-security" class="tab-content">
-            <div class="card" style="max-width: 500px; margin: 0 auto;">
-                <h2 class="card-title">🔒 Change Panel Password</h2>
-                <p class="card-desc">Passwords are hashed using bcrypt. Zero plain-text credentials stored.</p>
+            <div class="card-grid">
+                <!-- Change Password -->
+                <div class="card">
+                    <h2 class="card-title">🔒 Change Panel Password</h2>
+                    <p class="card-desc">Passwords are hashed using bcrypt. Zero plain-text credentials stored.</p>
 
-                <div class="input-group">
-                    <label class="input-label">New Panel Password:</label>
-                    <input type="password" id="newPasswordInput" placeholder="Enter new password (min 4 chars)">
+                    <div class="input-group">
+                        <label class="input-label">New Panel Password:</label>
+                        <input type="password" id="newPasswordInput" placeholder="Enter new password (min 4 chars)">
+                    </div>
+
+                    <button class="btn" onclick="changePassword()">🔑 UPDATE PASSWORD</button>
                 </div>
 
-                <button class="btn" onclick="changePassword()">🔑 UPDATE PASSWORD</button>
+                <!-- Cloudflare D1 Sync -->
+                <div class="card">
+                    <h2 class="card-title">☁️ Cloudflare D1 Database Sync</h2>
+                    <p class="card-desc">
+                        Persistent cloud backup powered by Cloudflare Worker (<code>ofc</code>) and D1 database.
+                        Settings are never deleted upon unlinking/logout and automatically restore upon pairing!
+                    </p>
+
+                    <div style="display: flex; gap: 0.8rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="pullFromCloudflare()">☁️ Restore from Cloudflare D1</button>
+                        <button class="btn" onclick="pushToCloudflare()">☁️ Push Backup to Cloudflare D1</button>
+                    </div>
+                </div>
+
+                <!-- Vercel Deployment Configuration -->
+                <div class="card" style="grid-column: 1 / -1;">
+                    <h2 class="card-title">🚀 Vercel & Multi-Cloud Deployment</h2>
+                    <p class="card-desc">
+                        When deploying the web dashboard on Vercel, set your WhatsApp bot backend URL below (Render, VPS, or Cloudflare Worker).
+                        Leave empty if hosted together on the same origin.
+                    </p>
+
+                    <div class="input-group">
+                        <label class="input-label">Backend Bot API URL (Optional for Vercel):</label>
+                        <input type="text" id="apiBaseUrlInput" placeholder="e.g. https://gaara-x-md.onrender.com or leave blank">
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="saveApiBaseUrl()">💾 SAVE BACKEND URL</button>
+                </div>
             </div>
         </div>
     </main>
