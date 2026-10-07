@@ -1,6 +1,12 @@
+import dns from 'node:dns';
 import db from '../../config/database.js';
 import config from '../../config/index.js';
 import logger from '../utils/logger.js';
+
+// Prioritize IPv4 for resilient Cloudflare edge connections
+try {
+    dns.setDefaultResultOrder?.('ipv4first');
+} catch {}
 
 const CF_WORKER_URL = process.env.CF_WORKER_URL || 'https://ofc.sayurusenavirathna70.workers.dev';
 const CF_API_TOKEN = process.env.CF_API_TOKEN || config.jwtSecret || 'gaara_x_md_secure_token_secret_key_2026';
