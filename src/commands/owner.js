@@ -4,6 +4,7 @@ import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { formatFramedMessage } from '../bot/format.js';
 import { restartBotSocket } from '../bot/socket.js';
+import { sendSettingsButtons } from '../bot/buttons.js';
 import logger from '../utils/logger.js';
 
 const execPromise = util.promisify(exec);
@@ -19,6 +20,15 @@ export function isOwner(msg, senderJid) {
 }
 
 export const ownerCommands = {
+    settings: {
+        description: 'Open interactive WhatsApp settings menu with buttons',
+        aliases: ['config', 'cfg', 'botsettings'],
+        run: async ({ sock, msg, jid, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+            await sendSettingsButtons(sock, jid, msg);
+        }
+    },
+
     mode: {
         description: 'Set bot mode: public, private, groups, or inbox',
         run: async ({ sock, msg, jid, args, sender }) => {

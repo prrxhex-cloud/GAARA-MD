@@ -11,6 +11,7 @@ import { formatFramedMessage, resolveDestinationJid } from './format.js';
 import { getCommand } from '../commands/index.js';
 import { isOwner } from '../commands/owner.js';
 import { dispatchBotLog } from './loggerNotifier.js';
+import { extractButtonPayload, handleSettingsButtonAction } from './buttons.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -27,17 +28,21 @@ export async function handleIncomingMessage(sock, msg) {
             return;
         }
 
+        // Unpack ephemeral wrapper for protocol, media & button inspection
+        const innerMsg = msg.message?.ephemeralMessage?.message || msg.message;
+
         // 2. Cache incoming message for Anti-Delete, Anti-Edit & View-Once recovery
         cacheMessage(msg);
 
-        // 3. Revoke / Anti-Delete Check (protocolMessage.type === 0)
-        if (msg.message?.protocolMessage?.type === 0) {
+        // 3. Revoke / Anti-Delete Check (protocolMessage.type === 0, including ephemeral)
+        const protoMsg = innerMsg?.protocolMessage;
+        if (protoMsg?.type === 0) {
             await handleRevoke(sock, msg);
             return;
         }
 
-        // 4. Edit / Anti-Edit Check (protocolMessage.type === 14)
-        if (msg.message?.protocolMessage?.type === 14) {
+        // 4. Edit / Anti-Edit Check (protocolMessage.type === 14 or editedMessage, including ephemeral)
+        if (protoMsg?.type === 14 || innerMsg?.editedMessage) {
             await handleEdit(sock, msg);
             return;
         }
@@ -48,10 +53,10 @@ export async function handleIncomingMessage(sock, msg) {
             return;
         }
 
-        // 6. Automatic View-Once Saver
+        // 6. Automatic View-Once Saver (including ephemeral wrapper)
         const settings = db.getSettings();
         if (settings.viewOnceSaver && !msg.key.fromMe) {
-            const m = msg.message;
+            const m = innerMsg;
             const isVO = m?.viewOnceMessage || m?.viewOnceMessageV2 || m?.viewOnceMessageV2Extension ||
                          m?.imageMessage?.viewOnce || m?.videoMessage?.viewOnce || m?.audioMessage?.viewOnce;
             if (isVO) {
@@ -107,23 +112,50 @@ export async function handleIncomingMessage(sock, msg) {
             }
         }
 
-        // 7. Extract text and identify prefix
-        const rawText = extractText(msg).trim();
+        // 7. Interactive WhatsApp Buttons Interceptor
+        const buttonPayload = extractButtonPayload(msg);
+        if (buttonPayload) {
+            const tappedText = buttonPayload.text || buttonPayload.id;
+            if (tappedText) {
+                logger.info({ tapped: tappedText, buttonId: buttonPayload.id }, '[Button] User tapped interactive button');
+            }
+
+            // Check if this button click is a Settings Configuration action
+            const isSettingsHandled = await handleSettingsButtonAction(sock, msg, buttonPayload);
+            if (isSettingsHandled) {
+                return;
+            }
+        }
+
+        // 8. Extract text and identify prefix
+        let rawText = extractText(msg).trim();
+        if (!rawText && buttonPayload) {
+            rawText = (buttonPayload.id || buttonPayload.text || '').trim();
+        }
         if (!rawText) return;
 
         const remoteJid = msg.key.remoteJid;
         const sender = msg.key.participant || remoteJid;
         const prefix = settings.prefix || '.';
 
-        // 8. Check if message is a command
-        if (rawText.startsWith(prefix)) {
+        // If button clicked was a direct command without prefix (e.g. 'ping' or 'alive')
+        let cmdTrigger = rawText;
+        if (!rawText.startsWith(prefix)) {
+            const directCmd = getCommand(rawText.toLowerCase());
+            if (directCmd) {
+                cmdTrigger = `${prefix}${rawText}`;
+            }
+        }
+
+        // 9. Check if message is a command
+        if (cmdTrigger.startsWith(prefix)) {
             // Anti-Spam Rate Limiter
             if (!checkRateLimit(sender)) {
                 logger.warn({ sender }, '[Handler] Rate limit exceeded');
                 return;
             }
 
-            const cleanCmdLine = rawText.slice(prefix.length).trim();
+            const cleanCmdLine = cmdTrigger.slice(prefix.length).trim();
             const parts = cleanCmdLine.split(/\s+/);
             const cmdName = parts[0]?.toLowerCase();
             const args = parts.slice(1);

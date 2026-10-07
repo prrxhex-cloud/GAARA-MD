@@ -1,5 +1,6 @@
 import {
     makeWASocket,
+    makeVoidExtrasSocket,
     useMultiFileAuthState,
     Browsers,
     DisconnectReason
@@ -12,6 +13,7 @@ import cfSync from '../services/cfSync.js';
 import { baileysLogger } from '../utils/logger.js';
 import logger from '../utils/logger.js';
 import { handleIncomingMessage } from './handler.js';
+import { handleRevoke } from '../handlers/antiDelete.js';
 import { handleEdit } from '../handlers/antiEdit.js';
 import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
@@ -173,6 +175,12 @@ export async function initBotSocket() {
 
         logger.info('[Bot] Initializing @sasa-dev/void-baileys socket engine...');
         const sock = makeWASocket(socketConfig);
+        try {
+            const extras = makeVoidExtrasSocket(sock);
+            Object.assign(sock, extras);
+        } catch (e) {
+            logger.debug({ err: e.message }, '[Bot] makeVoidExtrasSocket attachment notice');
+        }
         sockInstance = sock;
 
         // Credentials update
@@ -247,15 +255,45 @@ export async function initBotSocket() {
             }
         });
 
-        // Message updates listener (edits & protocol updates)
+        // Message deletions listener (Anti-Delete)
+        sock.ev.on('messages.delete', async (item) => {
+            if (!item) return;
+            if (Array.isArray(item.keys)) {
+                for (const key of item.keys) {
+                    if (!key || key.fromMe) continue;
+                    await handleRevoke(sock, { key });
+                }
+            }
+        });
+
+        // Message updates listener (edits, protocol updates & revokes)
         sock.ev.on('messages.update', async (updates) => {
             if (!Array.isArray(updates)) return;
             for (const update of updates) {
-                if (update.update?.message?.protocolMessage?.type === 14) {
+                const protoMsg = update.update?.message?.protocolMessage ||
+                                 update.update?.message?.ephemeralMessage?.message?.protocolMessage;
+                const isRevoke = update.update?.messageStubType === 68 ||
+                                 (update.update?.message === null && update.key?.id) ||
+                                 protoMsg?.type === 0;
+
+                if (isRevoke) {
+                    await handleRevoke(sock, {
+                        key: protoMsg?.key || update.key,
+                        message: update.update?.message,
+                        messageTimestamp: update.update?.messageTimestamp || Math.floor(Date.now() / 1000)
+                    });
+                    continue;
+                }
+
+                const isEdit = protoMsg?.type === 14 ||
+                               update.update?.message?.editedMessage ||
+                               update.update?.message?.ephemeralMessage?.message?.editedMessage;
+
+                if (isEdit) {
                     await handleEdit(sock, {
                         key: update.key,
-                        message: update.update.message,
-                        messageTimestamp: update.update.messageTimestamp || Math.floor(Date.now() / 1000)
+                        message: update.update?.message,
+                        messageTimestamp: update.update?.messageTimestamp || Math.floor(Date.now() / 1000)
                     });
                 }
             }

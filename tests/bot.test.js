@@ -14,6 +14,7 @@ import { allCommandCategories, commandMap, getCommand } from '../src/commands/in
 import { createServer } from '../src/server/app.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../config/constants.js';
 import { dispatchBotLog } from '../src/bot/loggerNotifier.js';
+import { SETTINGS_BUTTONS, formatSettingsMenuText, sendSettingsButtons, extractButtonPayload, handleSettingsButtonAction } from '../src/bot/buttons.js';
 
 describe('1. Database & Security Tests', () => {
     test('Settings initialize and persist properly', () => {
@@ -156,7 +157,7 @@ describe('4. Expanded Command Library Coverage', () => {
         // Customization
         'setbotname', 'setbotlogo', 'addreply', 'delreply', 'listreply', 'clearreplies',
         // Owner Controls
-        'mode', 'antiedit', 'anticall', 'antidelete', 'autostatus', 'block', 'unblock', 'broadcast', 'setprefix', 'eval', 'exec', 'clearcache', 'restart', 'join'
+        'settings', 'config', 'mode', 'antiedit', 'anticall', 'antidelete', 'autostatus', 'block', 'unblock', 'broadcast', 'setprefix', 'eval', 'exec', 'clearcache', 'restart', 'join'
     ];
 
     for (const cmd of requiredCommands) {
@@ -869,5 +870,432 @@ describe('7. Re-Pairing Resilience, Consolidated Welcome & Performance Tests', (
         await resetSession({ clearFiles: true });
     });
 });
+
+describe('8. Interactive WhatsApp Buttons Settings & Advanced Recovery Tests', () => {
+    test('SETTINGS_BUTTONS contains all 10 required options and formatSettingsMenuText is properly framed', () => {
+        assert.equal(SETTINGS_BUTTONS.length, 10);
+        const buttonIds = SETTINGS_BUTTONS.map(b => b.id);
+        assert.ok(buttonIds.includes('cfg_mode_public'));
+        assert.ok(buttonIds.includes('cfg_mode_private'));
+        assert.ok(buttonIds.includes('cfg_mode_groups'));
+        assert.ok(buttonIds.includes('cfg_mode_inbox'));
+        assert.ok(buttonIds.includes('cfg_delete_self'));
+        assert.ok(buttonIds.includes('cfg_delete_same'));
+        assert.ok(buttonIds.includes('cfg_edit_self'));
+        assert.ok(buttonIds.includes('cfg_edit_same'));
+        assert.ok(buttonIds.includes('cfg_viewonce_self'));
+        assert.ok(buttonIds.includes('cfg_viewonce_same'));
+
+        const menuText = formatSettingsMenuText();
+        assert.ok(menuText.includes('BOT CONFIGURATION PANEL'));
+        assert.ok(menuText.includes('Interactive WhatsApp Bot Settings'));
+        assert.ok(menuText.includes('Mode:'));
+        assert.ok(menuText.includes('Anti-Delete Dest:'));
+        assert.ok(menuText.includes('Anti-Edit Dest:'));
+        assert.ok(menuText.includes('View-Once Dest:'));
+        assert.ok(menuText.includes(BOT_FOOTER));
+    });
+
+    test('sendSettingsButtons delivers interactive buttons card', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendButton: async (jid, content) => {
+                mockSock.sentMessages.push({ jid, content, method: 'sendButton' });
+                return { key: { id: 'btn-msg-1' } };
+            },
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options, method: 'sendMessage' });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        await sendSettingsButtons(mockSock, '12345@s.whatsapp.net');
+        assert.equal(mockSock.sentMessages.length, 1);
+        const sent = mockSock.sentMessages[0];
+        assert.equal(sent.jid, '12345@s.whatsapp.net');
+        assert.ok(sent.content.buttons);
+        assert.equal(sent.content.buttons.length, 10);
+    });
+
+    test('.settings and .config command execution sends interactive settings card', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendButton: async (jid, content) => {
+                mockSock.sentMessages.push({ jid, content });
+                return { key: { id: 'btn-msg-2' } };
+            },
+            sendMessage: async (jid, content) => {
+                mockSock.sentMessages.push({ jid, content });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const ownerMsg = {
+            key: { id: 'owner-cmd', remoteJid: '94770000000@s.whatsapp.net', fromMe: true }
+        };
+
+        // 1. .settings
+        const settingsCmd = getCommand('settings');
+        assert.ok(settingsCmd);
+        await settingsCmd.run({ sock: mockSock, msg: ownerMsg, jid: '94770000000@s.whatsapp.net', sender: '94770000000@s.whatsapp.net' });
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.ok(mockSock.sentMessages[0].content.text.includes('BOT CONFIGURATION PANEL'));
+
+        // 2. .config alias
+        const configCmd = getCommand('config');
+        assert.ok(configCmd);
+        await configCmd.run({ sock: mockSock, msg: ownerMsg, jid: '94770000000@s.whatsapp.net', sender: '94770000000@s.whatsapp.net' });
+        assert.equal(mockSock.sentMessages.length, 2);
+    });
+
+    test('Button interceptor processes buttonsResponseMessage for mode configuration', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ mode: 'public', ownerNumber: '94770000000' });
+
+        // Simulate owner tapping '🔒 Private' button via classic buttonsResponseMessage
+        const buttonMsg = {
+            key: { id: 'btn-tap-1', remoteJid: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                buttonsResponseMessage: {
+                    selectedButtonId: 'cfg_mode_private',
+                    selectedDisplayText: '🔒 Private'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, buttonMsg);
+
+        assert.equal(db.getSettings().mode, 'private');
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.ok(mockSock.sentMessages[0].content.text.includes('CONFIGURATION UPDATED'));
+        assert.ok(mockSock.sentMessages[0].content.text.includes('PRIVATE'));
+    });
+
+    test('Button interceptor processes templateButtonReplyMessage for anti-delete destination', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ antiDeleteDestination: 'self', ownerNumber: '94770000000' });
+
+        const templateBtnMsg = {
+            key: { id: 'btn-tap-2', remoteJid: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                templateButtonReplyMessage: {
+                    selectedId: 'cfg_delete_same',
+                    selectedDisplayText: '🛡️ Delete: Same'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, templateBtnMsg);
+
+        assert.equal(db.getSettings().antiDeleteDestination, 'same');
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.ok(mockSock.sentMessages[0].content.text.includes('SAME CHAT'));
+    });
+
+    test('Button interceptor processes interactiveResponseMessage (nativeFlow) with paramsJson for anti-edit & view-once', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ antiEditDestination: 'self', viewOnceDestination: 'self', ownerNumber: '94770000000' });
+
+        // 1. Anti-Edit destination toggle
+        const nativeFlowEdit = {
+            key: { id: 'btn-tap-3', remoteJid: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                interactiveResponseMessage: {
+                    body: { text: '✏️ Edit: Same' },
+                    nativeFlowResponseMessage: {
+                        name: 'quick_reply',
+                        paramsJson: JSON.stringify({ id: 'cfg_edit_same', display_text: '✏️ Edit: Same' })
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, nativeFlowEdit);
+        assert.equal(db.getSettings().antiEditDestination, 'same');
+        assert.equal(mockSock.sentMessages.length, 1);
+
+        // 2. View-Once destination toggle
+        const nativeFlowVO = {
+            key: { id: 'btn-tap-4', remoteJid: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                interactiveResponseMessage: {
+                    body: { text: '🔓 ViewOnce: Same' },
+                    nativeFlowResponseMessage: {
+                        name: 'quick_reply',
+                        paramsJson: JSON.stringify({ id: 'cfg_viewonce_same', display_text: '🔓 ViewOnce: Same' })
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, nativeFlowVO);
+        assert.equal(db.getSettings().viewOnceDestination, 'same');
+        assert.equal(mockSock.sentMessages.length, 2);
+    });
+
+    test('Non-owner button taps on settings are rejected safely', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ mode: 'private', ownerNumber: '94770000000' });
+
+        const strangerBtnMsg = {
+            key: { id: 'stranger-tap', remoteJid: '12345@s.whatsapp.net', participant: '12345@s.whatsapp.net', fromMe: false },
+            message: {
+                buttonsResponseMessage: {
+                    selectedButtonId: 'cfg_mode_public',
+                    selectedDisplayText: '🌐 Public'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, strangerBtnMsg);
+
+        assert.equal(db.getSettings().mode, 'private', 'Mode must not change from unauthorized button tap');
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.ok(mockSock.sentMessages[0].content.text.includes('Only the bot owner'));
+    });
+
+    test('View-Once .readviewonce / .vv routes media to Self Chat when viewOnceDestination is self', async () => {
+        const mockSock = {
+            user: { id: '94770000000:1@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMedia: async () => Buffer.from('fake-view-once-image-binary'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ viewOnceDestination: 'self', ownerNumber: '94770000000' });
+
+        const groupJid = '999999-group@g.us';
+        const voCmdMsg = {
+            key: { id: 'cmd-vv-1', remoteJid: groupJid, participant: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '.vv',
+                    contextInfo: {
+                        quotedMessage: {
+                            viewOnceMessage: {
+                                message: {
+                                    imageMessage: {
+                                        caption: 'Secret view-once photo',
+                                        viewOnce: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const voCmd = getCommand('vv');
+        assert.ok(voCmd);
+        await voCmd.run({ sock: mockSock, msg: voCmdMsg, jid: groupJid });
+
+        // Unlocked image should be routed to Self Chat (94770000000@s.whatsapp.net)
+        const mediaMsg = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(mediaMsg, 'Unlocked image message must be sent');
+        assert.equal(mediaMsg.jid, '94770000000@s.whatsapp.net', 'Media must be sent to Self Chat');
+        assert.ok(mediaMsg.content.caption.includes('View-Once Recovered'));
+        assert.ok(mediaMsg.content.caption.includes('Secret view-once photo'));
+
+        // Confirmation notice sent in group
+        const groupNotice = mockSock.sentMessages.find(m => m.jid === groupJid && m.content.text?.includes('Self Chat'));
+        assert.ok(groupNotice, 'Confirmation notice should be sent to current chat');
+    });
+
+    test('View-Once .readviewonce / .vv routes media to same chat when viewOnceDestination is same', async () => {
+        const mockSock = {
+            user: { id: '94770000000:1@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMedia: async () => Buffer.from('fake-view-once-image-binary'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ viewOnceDestination: 'same', ownerNumber: '94770000000' });
+
+        const groupJid = '888888-group@g.us';
+        const voCmdMsg = {
+            key: { id: 'cmd-vv-2', remoteJid: groupJid, participant: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '.readviewonce',
+                    contextInfo: {
+                        quotedMessage: {
+                            imageMessage: {
+                                caption: 'Direct view-once photo',
+                                viewOnce: true
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const voCmd = getCommand('readviewonce');
+        assert.ok(voCmd);
+        await voCmd.run({ sock: mockSock, msg: voCmdMsg, jid: groupJid });
+
+        const mediaMsg = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(mediaMsg);
+        assert.equal(mediaMsg.jid, groupJid, 'Media must be sent to same group chat');
+    });
+
+    test('Ephemeral message unwrapping works for delete, edit, and view-once', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMedia: async () => Buffer.from('ephemeral-vo-content'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        // 1. Ephemeral wrapped revoke
+        const originalMsg = {
+            key: { id: 'eph-del-target', remoteJid: '12345@s.whatsapp.net', fromMe: false },
+            message: { conversation: 'Ephemeral text to be deleted' },
+            timestamp: 1760001000
+        };
+        cacheMessage(originalMsg);
+        db.updateSettings({ antiDelete: true, antiDeleteDestination: 'self' });
+
+        const ephRevoke = {
+            key: { id: 'eph-rev-msg', remoteJid: '12345@s.whatsapp.net', fromMe: false },
+            message: {
+                ephemeralMessage: {
+                    message: {
+                        protocolMessage: {
+                            type: 0,
+                            key: { id: 'eph-del-target', remoteJid: '12345@s.whatsapp.net', fromMe: false }
+                        }
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, ephRevoke);
+        const delRecovery = mockSock.sentMessages.find(m => m.content.text?.includes('[ 🛡️ ANTI DELETE ]'));
+        assert.ok(delRecovery, 'Anti-Delete must unpack ephemeral protocolMessage');
+        assert.ok(delRecovery.content.text.includes('Ephemeral text to be deleted'));
+
+        // 2. Ephemeral wrapped edit
+        const editTarget = {
+            key: { id: 'eph-edit-target', remoteJid: '12345@s.whatsapp.net', fromMe: false },
+            message: { conversation: 'Original ephemeral message' },
+            timestamp: 1760001050
+        };
+        cacheMessage(editTarget);
+        db.updateSettings({ antiEdit: true, antiEditDestination: 'self' });
+
+        const ephEdit = {
+            key: { id: 'eph-edit-msg', remoteJid: '12345@s.whatsapp.net', fromMe: false },
+            message: {
+                ephemeralMessage: {
+                    message: {
+                        protocolMessage: {
+                            type: 14,
+                            key: { id: 'eph-edit-target', remoteJid: '12345@s.whatsapp.net', fromMe: false },
+                            editedMessage: { conversation: 'Updated ephemeral message text' }
+                        }
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, ephEdit);
+        const editRecovery = mockSock.sentMessages.find(m => m.content.text?.includes('[ ✏️ MESSAGE EDITED ]'));
+        assert.ok(editRecovery, 'Anti-Edit must unpack ephemeral protocolMessage');
+        assert.ok(editRecovery.content.text.includes('Updated ephemeral message text'));
+
+        // 3. Ephemeral wrapped View-Once saver
+        db.updateSettings({ viewOnceSaver: true, viewOnceDestination: 'self' });
+        const ephVO = {
+            key: { id: 'eph-vo-msg', remoteJid: '77777@s.whatsapp.net', participant: '77777@s.whatsapp.net', fromMe: false },
+            message: {
+                ephemeralMessage: {
+                    message: {
+                        viewOnceMessage: {
+                            message: {
+                                imageMessage: {
+                                    caption: 'Ephemeral View-Once Pic'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, ephVO);
+        const voRecovery = mockSock.sentMessages.find(m => m.content.caption?.includes('Ephemeral View-Once Pic'));
+        assert.ok(voRecovery, 'View-Once Saver must unpack ephemeral wrapper');
+    });
+
+    test('messages.delete and messages.update stub 68 trigger message recovery', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const targetMsg = {
+            key: { id: 'msg-direct-key-del', remoteJid: '55555@s.whatsapp.net', fromMe: false },
+            message: { conversation: 'Deleted via stanza update' },
+            timestamp: 1760002000
+        };
+        cacheMessage(targetMsg);
+        db.updateSettings({ antiDelete: true, antiDeleteDestination: 'self' });
+
+        // Direct key invocation (as from messages.delete or messages.update stub 68)
+        await handleRevoke(mockSock, { key: { id: 'msg-direct-key-del', remoteJid: '55555@s.whatsapp.net' } });
+
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.ok(mockSock.sentMessages[0].content.text.includes('[ 🛡️ ANTI DELETE ]'));
+        assert.ok(mockSock.sentMessages[0].content.text.includes('Deleted via stanza update'));
+    });
+});
+
 
 

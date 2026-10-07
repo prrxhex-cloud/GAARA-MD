@@ -7,7 +7,7 @@ import {
     stickerToImage,
     toMp3
 } from '../utils/media.js';
-import { formatFramedMessage } from '../bot/format.js';
+import { formatFramedMessage, resolveDestinationJid } from '../bot/format.js';
 import db from '../../config/database.js';
 import logger from '../utils/logger.js';
 
@@ -155,20 +155,25 @@ export const mediaCommands = {
                 return sock.sendMessage(jid, { text: '⚠️ Reply to a View-Once image, video, or audio with *.readviewonce* or *.vv*' }, { quoted: msg });
             }
 
-            let viewOnceContent = quoted.viewOnceMessage?.message ||
-                                  quoted.viewOnceMessageV2?.message ||
-                                  quoted.viewOnceMessageV2Extension?.message;
+            const innerQuoted = quoted.ephemeralMessage?.message || quoted;
+            let viewOnceContent = innerQuoted.viewOnceMessage?.message ||
+                                  innerQuoted.viewOnceMessageV2?.message ||
+                                  innerQuoted.viewOnceMessageV2Extension?.message;
 
             // Also support direct media in quoted if not wrapped
             if (!viewOnceContent) {
-                if (quoted.imageMessage?.viewOnce || quoted.videoMessage?.viewOnce || quoted.audioMessage?.viewOnce) {
-                    viewOnceContent = quoted;
+                if (innerQuoted.imageMessage?.viewOnce || innerQuoted.videoMessage?.viewOnce || innerQuoted.audioMessage?.viewOnce) {
+                    viewOnceContent = innerQuoted;
                 }
             }
 
             if (!viewOnceContent) {
                 return sock.sendMessage(jid, { text: '⚠️ The quoted message is not a View-Once message.' }, { quoted: msg });
             }
+
+            const settings = db.getSettings();
+            const destinationChoice = settings.viewOnceDestination || 'self';
+            const targetJid = resolveDestinationJid(sock, jid, destinationChoice) || jid;
 
             try {
                 await sock.sendMessage(jid, { text: '🔓 Unlocking View-Once media...' }, { quoted: msg });
@@ -180,22 +185,33 @@ export const mediaCommands = {
 
                 if (!buffer) throw new Error('Could not download media stream');
 
+                const senderNum = (msg.key.participant || msg.key.remoteJid).split('@')[0];
+                const captionText = `🔓 *View-Once Recovered*\n` +
+                    (targetJid !== jid ? `👤 *Requester:* @${senderNum}\n` : '') +
+                    `${viewOnceContent.imageMessage?.caption || viewOnceContent.videoMessage?.caption || ''}`;
+
                 if (viewOnceContent.imageMessage) {
-                    await sock.sendMessage(jid, {
+                    await sock.sendMessage(targetJid, {
                         image: buffer,
-                        caption: `🔓 *View-Once Image Recovered*\n${viewOnceContent.imageMessage.caption || ''}`
-                    }, { quoted: msg });
+                        caption: captionText,
+                        mentions: [msg.key.participant || msg.key.remoteJid]
+                    });
                 } else if (viewOnceContent.videoMessage) {
-                    await sock.sendMessage(jid, {
+                    await sock.sendMessage(targetJid, {
                         video: buffer,
-                        caption: `🔓 *View-Once Video Recovered*\n${viewOnceContent.videoMessage.caption || ''}`
-                    }, { quoted: msg });
+                        caption: captionText,
+                        mentions: [msg.key.participant || msg.key.remoteJid]
+                    });
                 } else if (viewOnceContent.audioMessage) {
-                    await sock.sendMessage(jid, {
+                    await sock.sendMessage(targetJid, {
                         audio: buffer,
                         mimetype: viewOnceContent.audioMessage.mimetype || 'audio/mp4',
                         ptt: viewOnceContent.audioMessage.ptt || false
-                    }, { quoted: msg });
+                    });
+                }
+
+                if (targetJid !== jid) {
+                    await sock.sendMessage(jid, { text: '✅ View-Once media successfully unlocked and sent to your Self Chat!' }, { quoted: msg });
                 }
             } catch (err) {
                 await sock.sendMessage(jid, { text: `❌ Failed to extract view-once media: ${err.message}` }, { quoted: msg });

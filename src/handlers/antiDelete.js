@@ -11,33 +11,42 @@ import logger from '../utils/logger.js';
  */
 export async function handleRevoke(sock, msg) {
     try {
-        const protocolMsg = msg.message?.protocolMessage;
-        if (!protocolMsg || protocolMsg.type !== 0) return; // 0 = REVOKE
+        if (!msg) return;
 
-        const settings = db.getSettings();
-        const revokedKey = protocolMsg.key;
+        const msgContent = msg.message?.ephemeralMessage?.message || msg.message;
+        const protocolMsg = msgContent?.protocolMessage;
+
+        let revokedKey = null;
+        if (protocolMsg && protocolMsg.type === 0) {
+            revokedKey = protocolMsg.key;
+        } else if (msg.key && msg.key.id) {
+            revokedKey = msg.key;
+        }
+
         if (!revokedKey || !revokedKey.id) return;
 
         // If revoked by bot itself, don't notify
         if (revokedKey.fromMe) return;
 
-        const isStatus = revokedKey.remoteJid === 'status@broadcast';
-        if (isStatus && !settings.statusAntiDelete) return;
-        if (!isStatus && !settings.antiDelete) return;
-
+        const settings = db.getSettings();
         const cached = getCachedMessage(revokedKey.id);
         if (!cached) {
             logger.debug({ id: revokedKey.id }, '[AntiDelete] Revoked message not found in cache');
             return;
         }
 
+        const remoteJid = cached.remoteJid || revokedKey.remoteJid;
+        const isStatus = remoteJid === 'status@broadcast' || revokedKey.remoteJid === 'status@broadcast';
+        if (isStatus && !settings.statusAntiDelete) return;
+        if (!isStatus && !settings.antiDelete) return;
+
         // Determine destination based on event type
         const destinationChoice = isStatus
             ? (settings.statusDestination || 'self')
             : (settings.antiDeleteDestination || (settings.antiDeleteNotifySelf === false ? 'same' : 'self'));
 
-        const senderJid = cached.participant || cached.remoteJid;
-        const targetJid = resolveDestinationJid(sock, cached.remoteJid, destinationChoice, senderJid);
+        const senderJid = cached.participant || revokedKey.participant || remoteJid;
+        const targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
         if (!targetJid) return;
 
         const senderNum = senderJid ? senderJid.split('@')[0] : 'Unknown';

@@ -51,17 +51,31 @@ export function validateMessage(msg) {
  */
 export function extractText(msg) {
     if (!msg || !msg.message) return '';
-    const m = msg.message;
+    const m = msg.message?.ephemeralMessage?.message || msg.message;
+    let interactiveText = '';
+    if (m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson) {
+        try {
+            const parsed = JSON.parse(m.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson);
+            interactiveText = parsed.id || parsed.display_text || parsed.selectedId || m.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson;
+        } catch {
+            interactiveText = m.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson;
+        }
+    }
     return (
         m.conversation ||
         m.extendedTextMessage?.text ||
         m.imageMessage?.caption ||
         m.videoMessage?.caption ||
         m.documentMessage?.caption ||
-        m.templateButtonReplyMessage?.selectedId ||
+        m.buttonsResponseMessage?.selectedDisplayText ||
         m.buttonsResponseMessage?.selectedButtonId ||
-        m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ||
+        m.templateButtonReplyMessage?.selectedDisplayText ||
+        m.templateButtonReplyMessage?.selectedId ||
+        interactiveText ||
+        m.interactiveResponseMessage?.body?.text ||
         m.listResponseMessage?.singleSelectReply?.selectedRowId ||
+        m.listResponseMessage?.title ||
         ''
     );
 }
+

@@ -11,10 +11,22 @@ import logger from '../utils/logger.js';
  */
 export async function handleEdit(sock, msg) {
     try {
-        const protocolMsg = msg.message?.protocolMessage;
-        if (!protocolMsg || protocolMsg.type !== 14) return; // 14 = MESSAGE_EDIT
+        if (!msg) return;
 
-        const targetKey = protocolMsg.key;
+        const inner = msg.message?.ephemeralMessage?.message || msg.message;
+        const protocolMsg = inner?.protocolMessage;
+
+        let targetKey = null;
+        let editedMessage = null;
+
+        if (protocolMsg && protocolMsg.type === 14) {
+            targetKey = protocolMsg.key;
+            editedMessage = protocolMsg.editedMessage?.message || protocolMsg.editedMessage;
+        } else if (inner?.editedMessage) {
+            targetKey = msg.key;
+            editedMessage = inner.editedMessage?.message || inner.editedMessage;
+        }
+
         if (!targetKey || !targetKey.id) return;
 
         // Skip bot's own edits
@@ -22,16 +34,16 @@ export async function handleEdit(sock, msg) {
 
         const settings = db.getSettings();
         const cached = getCachedMessage(targetKey.id);
-        const remoteJid = targetKey.remoteJid || cached?.remoteJid || msg.key.remoteJid;
+        const remoteJid = targetKey.remoteJid || cached?.remoteJid || msg.key?.remoteJid;
         const isStatus = remoteJid === 'status@broadcast';
 
         if (isStatus && !settings.statusAntiDelete && !settings.antiEdit) return;
         if (!isStatus && !settings.antiEdit) return;
 
         const originalText = cached ? extractText(cached.raw || { message: cached.message }) : '(Not found in cache)';
-        const editedText = extractText({ message: protocolMsg.editedMessage }) || '(No text content)';
+        const editedText = extractText({ message: editedMessage }) || '(No text content)';
 
-        const senderJid = cached?.participant || targetKey.participant || (isStatus ? null : cached?.remoteJid) || (isStatus ? null : targetKey.remoteJid) || msg.key.participant || msg.key.remoteJid;
+        const senderJid = cached?.participant || targetKey.participant || (isStatus ? null : cached?.remoteJid) || (isStatus ? null : targetKey.remoteJid) || msg.key?.participant || msg.key?.remoteJid;
         const senderNum = senderJid ? senderJid.split('@')[0] : 'Unknown';
         const isGroup = remoteJid && remoteJid.endsWith('@g.us');
         const chatName = isStatus ? 'WhatsApp Status' : (isGroup ? `Group (${remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`);
@@ -75,8 +87,8 @@ export async function handleEdit(sock, msg) {
 
         // Update the cached entry with edited content
         if (cached) {
-            cached.message = protocolMsg.editedMessage;
-            if (cached.raw) cached.raw.message = protocolMsg.editedMessage;
+            cached.message = editedMessage;
+            if (cached.raw) cached.raw.message = editedMessage;
             messageCache.set(targetKey.id, cached);
         } else {
             messageCache.set(targetKey.id, {
@@ -86,8 +98,8 @@ export async function handleEdit(sock, msg) {
                 participant: senderJid,
                 pushName: 'User',
                 timestamp: msg.messageTimestamp || Math.floor(Date.now() / 1000),
-                message: protocolMsg.editedMessage,
-                raw: { key: targetKey, message: protocolMsg.editedMessage }
+                message: editedMessage,
+                raw: { key: targetKey, message: editedMessage }
             });
         }
     } catch (err) {

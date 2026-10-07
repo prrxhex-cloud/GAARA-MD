@@ -195,6 +195,7 @@ export const navigationCommands = {
                     emoji: '🔒',
                     title: 'OWNER CONTROLS',
                     content: [
+                        `🔹 *${p}settings* / *${p}config* — WhatsApp button settings`,
                         `🔹 *${p}mode* <public|private> — Switch mode`,
                         `🔹 *${p}anticall* <on|off> — Call guard`,
                         `🔹 *${p}antidelete* <on|off> — Revoke guard`,
