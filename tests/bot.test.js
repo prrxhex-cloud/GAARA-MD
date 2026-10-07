@@ -758,6 +758,7 @@ describe('7. Re-Pairing Resilience, Consolidated Welcome & Performance Tests', (
             antiEdit: true,
             antiEditDestination: 'same',
             viewOnceSaver: true,
+            viewOnceDestination: 'self',
             autoStatus: false
         });
 
