@@ -4,7 +4,13 @@ import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { formatFramedMessage } from '../bot/format.js';
 import { restartBotSocket } from '../bot/socket.js';
-import { sendSettingsButtons } from '../bot/buttons.js';
+import {
+    sendSettingsButtons,
+    sendNativeFlowButtons,
+    sendTemplateButtons,
+    sendPlainButtons,
+    sendClassicButtons
+} from '../bot/buttons.js';
 import logger from '../utils/logger.js';
 
 const execPromise = util.promisify(exec);
@@ -26,6 +32,56 @@ export const ownerCommands = {
         run: async ({ sock, msg, jid, sender }) => {
             if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
             await sendSettingsButtons(sock, jid, msg);
+        }
+    },
+
+    buttons: {
+        description: 'Demo interactive action buttons (Plain, Template, Native Flow, and Classic)',
+        aliases: ['demobuttons', 'pizza'],
+        run: async ({ sock, msg, jid, args }) => {
+            const style = (args[0] || 'flow').toLowerCase();
+            if (style === 'plain') {
+                await sendPlainButtons(sock, jid, {
+                    text: 'Select an option below',
+                    footer: 'Void Pizza',
+                    buttons: [
+                        { buttonId: 'order-pizza', buttonText: { displayText: 'Order Pizza' }, type: 1 },
+                        { buttonId: 'track-order', buttonText: { displayText: 'Track Order' }, type: 1 },
+                        { buttonId: 'talk-human', buttonText: { displayText: 'Talk to a Human' }, type: 1 },
+                    ],
+                    quoted: msg
+                });
+            } else if (style === 'template') {
+                await sendTemplateButtons(sock, jid, {
+                    text: 'Your pizza is on the way',
+                    title: 'Order confirmation',
+                    templateButtons: [
+                        { index: 1, text: 'OK', buttonText: 'OK' },
+                        { index: 2, text: 'Call us', call: '+94771234567' },
+                        { index: 3, text: 'Website', url: 'https://example.com' },
+                    ],
+                    quoted: msg
+                });
+            } else if (style === 'classic') {
+                await sendClassicButtons(sock, jid, {
+                    text: 'Legacy layout',
+                    footer: 'Void Pizza',
+                    buttons: [{ id: 'old-school', text: 'Old style' }],
+                    quoted: msg
+                });
+            } else {
+                await sendNativeFlowButtons(sock, jid, {
+                    text: 'Choose your meal',
+                    footer: 'Void Pizza',
+                    buttons: [
+                        { id: 'pizza', text: 'Pizza' },
+                        { id: 'burger', text: 'Burger' },
+                        { copy: 'npm i @sasa-dev/void-baileys', text: 'Copy install cmd' },
+                        { url: 'https://example.com/menu', text: 'Website' },
+                    ],
+                    quoted: msg
+                });
+            }
         }
     },
 

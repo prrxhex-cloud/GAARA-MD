@@ -155,21 +155,36 @@ export const mediaCommands = {
                 return sock.sendMessage(jid, { text: '⚠️ Reply to a View-Once image, video, or audio with *.readviewonce* or *.vv*' }, { quoted: msg });
             }
 
-            const innerQuoted = quoted.ephemeralMessage?.message || quoted;
-            let viewOnceContent = innerQuoted.viewOnceMessage?.message ||
-                                  innerQuoted.viewOnceMessageV2?.message ||
-                                  innerQuoted.viewOnceMessageV2Extension?.message;
-
-            // Also support direct media in quoted if not wrapped
-            if (!viewOnceContent) {
-                if (innerQuoted.imageMessage?.viewOnce || innerQuoted.videoMessage?.viewOnce || innerQuoted.audioMessage?.viewOnce) {
-                    viewOnceContent = innerQuoted;
+            let curr = quoted;
+            let foundVO = false;
+            while (curr) {
+                if (curr.ephemeralMessage?.message) {
+                    curr = curr.ephemeralMessage.message;
+                } else if (curr.viewOnceMessage?.message) {
+                    curr = curr.viewOnceMessage.message;
+                    foundVO = true;
+                } else if (curr.viewOnceMessageV2?.message) {
+                    curr = curr.viewOnceMessageV2.message;
+                    foundVO = true;
+                } else if (curr.viewOnceMessageV2Extension?.message) {
+                    curr = curr.viewOnceMessageV2Extension.message;
+                    foundVO = true;
+                } else if (curr.documentWithCaptionMessage?.message) {
+                    curr = curr.documentWithCaptionMessage.message;
+                } else {
+                    break;
                 }
             }
 
-            if (!viewOnceContent) {
+            if (!foundVO && (curr?.imageMessage?.viewOnce || curr?.videoMessage?.viewOnce || curr?.audioMessage?.viewOnce)) {
+                foundVO = true;
+            }
+
+            if (!foundVO || (!curr?.imageMessage && !curr?.videoMessage && !curr?.audioMessage)) {
                 return sock.sendMessage(jid, { text: '⚠️ The quoted message is not a View-Once message.' }, { quoted: msg });
             }
+
+            const viewOnceContent = curr;
 
             const settings = db.getSettings();
             const destinationChoice = settings.viewOnceDestination || 'self';

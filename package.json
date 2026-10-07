@@ -18,7 +18,7 @@
   "author": "GAARA DEV OFC",
   "license": "MIT",
   "dependencies": {
-    "@sasa-dev/void-baileys": "^2.3.0",
+    "@sasa-dev/void-baileys": "^2.4.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

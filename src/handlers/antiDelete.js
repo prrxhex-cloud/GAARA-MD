@@ -35,6 +35,9 @@ export async function handleRevoke(sock, msg) {
             return;
         }
 
+        // Do not notify if original message was from the bot itself
+        if (cached.fromMe && (revokedKey.fromMe || !revokedKey.participant)) return;
+
         const remoteJid = cached.remoteJid || revokedKey.remoteJid;
         const isStatus = remoteJid === 'status@broadcast' || revokedKey.remoteJid === 'status@broadcast';
         if (isStatus && !settings.statusAntiDelete) return;
@@ -46,7 +49,10 @@ export async function handleRevoke(sock, msg) {
             : (settings.antiDeleteDestination || (settings.antiDeleteNotifySelf === false ? 'same' : 'self'));
 
         const senderJid = cached.participant || revokedKey.participant || remoteJid;
-        const targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
+        let targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
+        if (!targetJid) {
+            targetJid = destinationChoice === 'same' ? remoteJid : null;
+        }
         if (!targetJid) return;
 
         const senderNum = senderJid ? senderJid.split('@')[0] : 'Unknown';

@@ -51,7 +51,22 @@ export function validateMessage(msg) {
  */
 export function extractText(msg) {
     if (!msg || !msg.message) return '';
-    const m = msg.message?.ephemeralMessage?.message || msg.message;
+    let m = msg.message;
+    while (m) {
+        if (m.ephemeralMessage?.message) {
+            m = m.ephemeralMessage.message;
+        } else if (m.viewOnceMessage?.message) {
+            m = m.viewOnceMessage.message;
+        } else if (m.viewOnceMessageV2?.message) {
+            m = m.viewOnceMessageV2.message;
+        } else if (m.viewOnceMessageV2Extension?.message) {
+            m = m.viewOnceMessageV2Extension.message;
+        } else if (m.documentWithCaptionMessage?.message) {
+            m = m.documentWithCaptionMessage.message;
+        } else {
+            break;
+        }
+    }
     let interactiveText = '';
     if (m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson) {
         try {

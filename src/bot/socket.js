@@ -19,6 +19,7 @@ import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
 import { formatConnectedSetupMessage } from './format.js';
 import { dispatchBotLog } from './loggerNotifier.js';
+import { messageCache } from './cache.js';
 
 let sockInstance = null;
 let currentPairingCode = null;
@@ -251,6 +252,13 @@ export async function initBotSocket() {
             if (!Array.isArray(messages)) return;
             for (const msg of messages) {
                 botTelemetry.messagesHandled++;
+                const text = msg?.message?.buttonsResponseMessage?.selectedDisplayText
+                    ?? msg?.message?.templateButtonReplyMessage?.selectedDisplayText
+                    ?? msg?.message?.ephemeralMessage?.message?.buttonsResponseMessage?.selectedDisplayText
+                    ?? msg?.message?.ephemeralMessage?.message?.templateButtonReplyMessage?.selectedDisplayText;
+                if (text) {
+                    console.log('user tapped:', text);
+                }
                 await handleIncomingMessage(sock, msg);
             }
         });
@@ -258,10 +266,18 @@ export async function initBotSocket() {
         // Message deletions listener (Anti-Delete)
         sock.ev.on('messages.delete', async (item) => {
             if (!item) return;
-            if (Array.isArray(item.keys)) {
-                for (const key of item.keys) {
-                    if (!key || key.fromMe) continue;
-                    await handleRevoke(sock, { key });
+            const keys = Array.isArray(item) ? item : (Array.isArray(item.keys) ? item.keys : []);
+            for (const key of keys) {
+                if (!key || key.fromMe) continue;
+                await handleRevoke(sock, { key });
+            }
+            if (item.all && item.jid) {
+                const allKeys = messageCache.keys();
+                for (const k of allKeys) {
+                    const cached = messageCache.get(k);
+                    if (cached && cached.remoteJid === item.jid && !cached.fromMe) {
+                        await handleRevoke(sock, { key: cached.key });
+                    }
                 }
             }
         });
@@ -287,7 +303,9 @@ export async function initBotSocket() {
 
                 const isEdit = protoMsg?.type === 14 ||
                                update.update?.message?.editedMessage ||
-                               update.update?.message?.ephemeralMessage?.message?.editedMessage;
+                               update.update?.message?.editedMessage?.message ||
+                               update.update?.message?.ephemeralMessage?.message?.editedMessage ||
+                               update.update?.message?.ephemeralMessage?.message?.editedMessage?.message;
 
                 if (isEdit) {
                     await handleEdit(sock, {

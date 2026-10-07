@@ -1,5 +1,6 @@
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
 import db from '../../config/database.js';
+import config from '../../config/index.js';
 
 /**
  * Creates an ASCII Framing Box exactly matching the user's specification.
@@ -86,6 +87,14 @@ export function resolveDestinationJid(sock, remoteJid, destinationPreference = '
             const raw = sock.user.id;
             const num = raw.includes('@') ? raw.split('@')[0].split(':')[0] : raw.split(':')[0];
             selfJid = `${num}@s.whatsapp.net`;
+        }
+    }
+
+    if (!selfJid) {
+        const settings = db.getSettings();
+        const ownerNum = (settings.ownerNumber || config.ownerNumber || '').replace(/[^0-9]/g, '');
+        if (ownerNum) {
+            selfJid = `${ownerNum}@s.whatsapp.net`;
         }
     }
 

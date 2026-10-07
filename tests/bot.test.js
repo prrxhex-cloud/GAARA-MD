@@ -14,7 +14,17 @@ import { allCommandCategories, commandMap, getCommand } from '../src/commands/in
 import { createServer } from '../src/server/app.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../config/constants.js';
 import { dispatchBotLog } from '../src/bot/loggerNotifier.js';
-import { SETTINGS_BUTTONS, formatSettingsMenuText, sendSettingsButtons, extractButtonPayload, handleSettingsButtonAction } from '../src/bot/buttons.js';
+import {
+    SETTINGS_BUTTONS,
+    formatSettingsMenuText,
+    sendSettingsButtons,
+    sendPlainButtons,
+    sendTemplateButtons,
+    sendNativeFlowButtons,
+    sendClassicButtons,
+    extractButtonPayload,
+    handleSettingsButtonAction
+} from '../src/bot/buttons.js';
 
 describe('1. Database & Security Tests', () => {
     test('Settings initialize and persist properly', () => {
@@ -1294,6 +1304,212 @@ describe('8. Interactive WhatsApp Buttons Settings & Advanced Recovery Tests', (
         assert.equal(mockSock.sentMessages.length, 1);
         assert.ok(mockSock.sentMessages[0].content.text.includes('[ 🛡️ ANTI DELETE ]'));
         assert.ok(mockSock.sentMessages[0].content.text.includes('Deleted via stanza update'));
+    });
+
+    test('sendPlainButtons, sendTemplateButtons, sendNativeFlowButtons, and sendClassicButtons helpers', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendButton: async (jid, content) => {
+                mockSock.sentMessages.push({ jid, content, type: 'sendButton' });
+                return { key: { id: 'btn-1' } };
+            },
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options, type: 'sendMessage' });
+                return { key: { id: 'msg-1' } };
+            }
+        };
+
+        // 1. Plain buttons
+        await sendPlainButtons(mockSock, '123@s.whatsapp.net', {
+            text: 'Select an option below',
+            footer: 'Void Pizza',
+            buttons: [
+                { buttonId: 'order-pizza', displayText: 'Order Pizza' },
+                { buttonId: 'track-order', displayText: 'Track Order' },
+                { buttonId: 'talk-human', displayText: 'Talk to a Human' }
+            ]
+        });
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].content.buttons.length, 3);
+        assert.equal(mockSock.sentMessages[0].content.footer, 'Void Pizza');
+
+        // 2. Template buttons
+        await sendTemplateButtons(mockSock, '123@s.whatsapp.net', {
+            text: 'Your pizza is on the way',
+            title: 'Order confirmation',
+            templateButtons: [
+                { index: 1, text: 'OK' },
+                { index: 2, call: '+94771234567' },
+                { index: 3, url: 'https://example.com' }
+            ]
+        });
+        assert.equal(mockSock.sentMessages.length, 2);
+        assert.equal(mockSock.sentMessages[1].content.templateButtons.length, 3);
+
+        // 3. Native Flow buttons
+        await sendNativeFlowButtons(mockSock, '123@s.whatsapp.net', {
+            text: 'Choose your meal',
+            footer: 'Void Pizza',
+            buttons: [
+                { id: 'pizza', text: 'Pizza' },
+                { id: 'burger', text: 'Burger' },
+                { copy: 'npm i @sasa-dev/void-baileys', text: 'Copy install cmd' },
+                { url: 'https://example.com/menu', text: 'Website' }
+            ]
+        });
+        assert.equal(mockSock.sentMessages.length, 3);
+        assert.equal(mockSock.sentMessages[2].content.buttons.length, 4);
+
+        // 4. Classic buttons
+        await sendClassicButtons(mockSock, '123@s.whatsapp.net', {
+            text: 'Legacy layout',
+            footer: 'Void Pizza',
+            buttons: [{ id: 'old-school', text: 'Old style' }]
+        });
+        assert.equal(mockSock.sentMessages.length, 4);
+        assert.equal(mockSock.sentMessages[3].content.style, 'classic');
+
+        // 5. .buttons command execution
+        const buttonsCmd = getCommand('buttons');
+        assert.ok(buttonsCmd);
+        await buttonsCmd.run({ sock: mockSock, msg: { key: { id: 'cmd' } }, jid: '123@s.whatsapp.net', args: ['plain'] });
+        assert.equal(mockSock.sentMessages.length, 5);
+    });
+
+    test('messages.delete with { jid, all: true } bulk recovers messages for chat', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'bulk-del' } };
+            }
+        };
+
+        const groupJid = 'bulk-chat@g.us';
+        const msgA = {
+            key: { id: 'bulk-msg-1', remoteJid: groupJid, fromMe: false },
+            message: { conversation: 'First bulk message' },
+            timestamp: 1760003000
+        };
+        const msgB = {
+            key: { id: 'bulk-msg-2', remoteJid: groupJid, fromMe: false },
+            message: { conversation: 'Second bulk message' },
+            timestamp: 1760003001
+        };
+        cacheMessage(msgA);
+        cacheMessage(msgB);
+        db.updateSettings({ antiDelete: true, antiDeleteDestination: 'self' });
+
+        // Simulate bulk chat clear event
+        const deleteItem = { jid: groupJid, all: true };
+        const keys = Array.isArray(deleteItem) ? deleteItem : (Array.isArray(deleteItem.keys) ? deleteItem.keys : []);
+        for (const key of keys) {
+            if (!key || key.fromMe) continue;
+            await handleRevoke(mockSock, { key });
+        }
+        if (deleteItem.all && deleteItem.jid) {
+            const allKeys = [msgA.key.id, msgB.key.id];
+            for (const k of allKeys) {
+                const cached = getCachedMessage(k);
+                if (cached && cached.remoteJid === deleteItem.jid && !cached.fromMe) {
+                    await handleRevoke(mockSock, { key: cached.key });
+                }
+            }
+        }
+
+        assert.equal(mockSock.sentMessages.length, 2);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text.includes('First bulk message')));
+        assert.ok(mockSock.sentMessages.some(m => m.content.text.includes('Second bulk message')));
+    });
+
+    test('View-Once .readviewonce unwraps viewOnceMessage wrapping ephemeralMessage with image', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMediaMessage: async () => Buffer.from('reverse-nested-image'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-vo' } };
+            }
+        };
+
+        db.updateSettings({ viewOnceDestination: 'same' });
+
+        // View-once wraps ephemeralMessage (reverse nesting)
+        const reverseQuoted = {
+            viewOnceMessage: {
+                message: {
+                    ephemeralMessage: {
+                        message: {
+                            imageMessage: {
+                                caption: 'Reverse nested VO pic',
+                                viewOnce: true
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const voCmdMsg = {
+            key: { id: 'cmd-reverse-vo', remoteJid: 'test-chat@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '.vv',
+                    contextInfo: { quotedMessage: reverseQuoted }
+                }
+            }
+        };
+
+        const vvCmd = getCommand('vv');
+        assert.ok(vvCmd);
+        await vvCmd.run({ sock: mockSock, msg: voCmdMsg, jid: 'test-chat@s.whatsapp.net' });
+
+        const sentImg = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(sentImg, 'Media must be extracted and sent for reverse nested viewOnce');
+        assert.ok(sentImg.content.caption.includes('Reverse nested VO pic'));
+    });
+
+    test('Bracketed button texts and demo pizza action buttons work properly', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ mode: 'public', ownerNumber: '94770000000' });
+
+        // 1. Bracketed mode button tap: [ 🔒 Private ]
+        const bracketBtnMsg = {
+            key: { id: 'btn-bracket', remoteJid: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                buttonsResponseMessage: {
+                    selectedButtonId: '[ 🔒 Private ]',
+                    selectedDisplayText: '[ 🔒 Private ]'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, bracketBtnMsg);
+        assert.equal(db.getSettings().mode, 'private', 'Mode must update to private from bracketed text');
+
+        // 2. Demo pizza order button tap
+        const pizzaOrderMsg = {
+            key: { id: 'btn-pizza-order', remoteJid: '94770000000@s.whatsapp.net', fromMe: false },
+            message: {
+                buttonsResponseMessage: {
+                    selectedButtonId: 'order-pizza',
+                    selectedDisplayText: 'Order Pizza'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, pizzaOrderMsg);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text?.includes('Order Placed!')));
     });
 });
 

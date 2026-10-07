@@ -23,6 +23,72 @@ export const SETTINGS_BUTTONS = [
 ];
 
 /**
+ * 1. Plain Buttons helper (sendMessage with buttons array)
+ */
+export async function sendPlainButtons(sock, jid, { text, footer, buttons = [], quoted = null } = {}) {
+    return await sock.sendMessage(jid, {
+        text,
+        footer,
+        buttons: buttons.map((b, i) => ({
+            buttonId: b.buttonId || b.id || `btn_${i + 1}`,
+            buttonText: { displayText: b.displayText || b.text || b.buttonText?.displayText || `Button ${i + 1}` },
+            type: b.type ?? 1
+        }))
+    }, quoted ? { quoted } : {});
+}
+
+/**
+ * 2. Template Buttons helper (sendMessage with templateButtons array)
+ */
+export async function sendTemplateButtons(sock, jid, { text, title, footer, templateButtons = [], quoted = null } = {}) {
+    return await sock.sendMessage(jid, {
+        text,
+        title,
+        footer,
+        templateButtons: templateButtons.map((tb, idx) => ({
+            index: tb.index ?? (idx + 1),
+            text: tb.text || tb.buttonText || '',
+            ...(tb.buttonText ? { buttonText: tb.buttonText } : {}),
+            ...(tb.call ? { call: tb.call } : {}),
+            ...(tb.url ? { url: tb.url } : {})
+        }))
+    }, quoted ? { quoted } : {});
+}
+
+/**
+ * 3. Native Flow Buttons helper (makeVoidExtrasSocket(sock).sendButton)
+ */
+export async function sendNativeFlowButtons(sock, jid, { text, footer, buttons = [], image, video, quoted = null } = {}) {
+    const socket = typeof sock.sendButton === 'function' ? sock : makeVoidExtrasSocket(sock);
+    if (typeof socket.sendButton === 'function') {
+        return await socket.sendButton(jid, {
+            text,
+            footer,
+            buttons,
+            ...(image ? { image } : {}),
+            ...(video ? { video } : {})
+        });
+    }
+    return await sendPlainButtons(sock, jid, { text, footer, buttons, quoted });
+}
+
+/**
+ * 4. Classic Buttons helper (makeVoidExtrasSocket(sock).sendButton with style: 'classic')
+ */
+export async function sendClassicButtons(sock, jid, { text, footer, buttons = [], quoted = null } = {}) {
+    const socket = typeof sock.sendButton === 'function' ? sock : makeVoidExtrasSocket(sock);
+    if (typeof socket.sendButton === 'function') {
+        return await socket.sendButton(jid, {
+            text,
+            footer,
+            style: 'classic',
+            buttons
+        });
+    }
+    return await sendPlainButtons(sock, jid, { text, footer, buttons, quoted });
+}
+
+/**
  * Formats the live settings menu card.
  */
 export function formatSettingsMenuText() {
@@ -89,11 +155,27 @@ export async function sendSettingsButtons(sock, jid, quotedMsg = null) {
 }
 
 /**
- * Extracts button reply information across all Baileys & Void-Baileys message variations.
+ * Extracts button reply information across all Baileys & Void-Baileys message variations,
+ * recursively unwrapping any ephemeral or viewOnce wrappers.
  */
 export function extractButtonPayload(msg) {
     if (!msg || !msg.message) return null;
-    const m = msg.message?.ephemeralMessage?.message || msg.message;
+    let m = msg.message;
+    while (m) {
+        if (m.ephemeralMessage?.message) {
+            m = m.ephemeralMessage.message;
+        } else if (m.viewOnceMessage?.message) {
+            m = m.viewOnceMessage.message;
+        } else if (m.viewOnceMessageV2?.message) {
+            m = m.viewOnceMessageV2.message;
+        } else if (m.viewOnceMessageV2Extension?.message) {
+            m = m.viewOnceMessageV2Extension.message;
+        } else if (m.documentWithCaptionMessage?.message) {
+            m = m.documentWithCaptionMessage.message;
+        } else {
+            break;
+        }
+    }
 
     // 1. Classic buttonsResponseMessage
     if (m.buttonsResponseMessage) {
@@ -146,52 +228,75 @@ export function extractButtonPayload(msg) {
 }
 
 /**
- * Handles incoming button taps for configuration settings.
- * Returns true if the button was recognized and processed as a settings action.
+ * Handles incoming button taps for configuration settings and demo action buttons.
+ * Returns true if the button was recognized and processed.
  */
 export async function handleSettingsButtonAction(sock, msg, payload) {
     if (!payload) return false;
     const rawId = (payload.id || '').toLowerCase().trim();
     const rawText = (payload.text || '').toLowerCase().trim();
+    const cleanId = rawId.replace(/[[\]]/g, '').trim();
+    const cleanText = rawText.replace(/[[\]]/g, '').trim();
+
+    // Demo button actions (supporting pizza and void extras examples)
+    if (cleanId === 'order-pizza' || cleanText === 'order pizza') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '🍕 *Order Placed!* Your pizza is being prepared.' }, { quoted: msg });
+        return true;
+    } else if (cleanId === 'track-order' || cleanText === 'track order') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '🚚 *Tracking:* Your pizza is on the way!' }, { quoted: msg });
+        return true;
+    } else if (cleanId === 'talk-human' || cleanText === 'talk to a human') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '📞 *Support:* An agent will contact you shortly.' }, { quoted: msg });
+        return true;
+    } else if (cleanId === 'pizza' || cleanText === 'pizza') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '🍕 You chose delicious Pizza!' }, { quoted: msg });
+        return true;
+    } else if (cleanId === 'burger' || cleanText === 'burger') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '🍔 You chose juicy Burger!' }, { quoted: msg });
+        return true;
+    } else if (cleanId === 'old-school' || cleanText === 'old style') {
+        await sock.sendMessage(msg.key.remoteJid, { text: '📻 Legacy classic button tapped!' }, { quoted: msg });
+        return true;
+    }
 
     let settingUpdates = null;
     let label = '';
 
     // Mode mappings
-    if (rawId === 'cfg_mode_public' || rawId === 'mode_public' || rawText === '🌐 public' || rawText === 'public') {
+    if (cleanId === 'cfg_mode_public' || cleanId === 'mode_public' || cleanText === '🌐 public' || cleanText === 'public') {
         settingUpdates = { mode: 'public' };
         label = 'Bot Mode set to PUBLIC (All users can use commands)';
-    } else if (rawId === 'cfg_mode_private' || rawId === 'mode_private' || rawText === '🔒 private' || rawText === 'private') {
+    } else if (cleanId === 'cfg_mode_private' || cleanId === 'mode_private' || cleanText === '🔒 private' || cleanText === 'private') {
         settingUpdates = { mode: 'private' };
         label = 'Bot Mode set to PRIVATE (Owner only)';
-    } else if (rawId === 'cfg_mode_groups' || rawId === 'mode_groups' || rawText === '👥 groups' || rawText === 'groups') {
+    } else if (cleanId === 'cfg_mode_groups' || cleanId === 'mode_groups' || cleanText === '👥 groups' || cleanText === 'groups') {
         settingUpdates = { mode: 'groups' };
         label = 'Bot Mode set to GROUPS ONLY (Commands disabled in DMs)';
-    } else if (rawId === 'cfg_mode_inbox' || rawId === 'mode_inbox' || rawText === '📩 inbox' || rawText === 'inbox') {
+    } else if (cleanId === 'cfg_mode_inbox' || cleanId === 'mode_inbox' || cleanText === '📩 inbox' || cleanText === 'inbox') {
         settingUpdates = { mode: 'inbox' };
         label = 'Bot Mode set to INBOX ONLY (Commands disabled in groups)';
     }
     // Anti-Delete Destination mappings
-    else if (rawId === 'cfg_delete_self' || rawId === 'delete_self' || rawText.includes('delete: self') || rawText === 'delete self') {
+    else if (cleanId === 'cfg_delete_self' || cleanId === 'delete_self' || cleanText.includes('delete: self') || cleanText === 'delete self') {
         settingUpdates = { antiDelete: true, antiDeleteDestination: 'self', antiDeleteNotifySelf: true };
         label = 'Anti-Delete Destination set to SELF CHAT (Message Yourself)';
-    } else if (rawId === 'cfg_delete_same' || rawId === 'delete_same' || rawText.includes('delete: same') || rawText === 'delete same') {
+    } else if (cleanId === 'cfg_delete_same' || cleanId === 'delete_same' || cleanText.includes('delete: same') || cleanText === 'delete same') {
         settingUpdates = { antiDelete: true, antiDeleteDestination: 'same', antiDeleteNotifySelf: false };
         label = 'Anti-Delete Destination set to SAME CHAT (Chat where deletion occurred)';
     }
     // Anti-Edit Destination mappings
-    else if (rawId === 'cfg_edit_self' || rawId === 'edit_self' || rawText.includes('edit: self') || rawText === 'edit self') {
+    else if (cleanId === 'cfg_edit_self' || cleanId === 'edit_self' || cleanText.includes('edit: self') || cleanText === 'edit self') {
         settingUpdates = { antiEdit: true, antiEditDestination: 'self' };
         label = 'Anti-Edit Destination set to SELF CHAT (Message Yourself)';
-    } else if (rawId === 'cfg_edit_same' || rawId === 'edit_same' || rawText.includes('edit: same') || rawText === 'edit same') {
+    } else if (cleanId === 'cfg_edit_same' || cleanId === 'edit_same' || cleanText.includes('edit: same') || cleanText === 'edit same') {
         settingUpdates = { antiEdit: true, antiEditDestination: 'same' };
         label = 'Anti-Edit Destination set to SAME CHAT (Chat where edit occurred)';
     }
     // View-Once Destination mappings
-    else if (rawId === 'cfg_viewonce_self' || rawId === 'viewonce_self' || rawText.includes('viewonce: self') || rawText === 'viewonce self') {
+    else if (cleanId === 'cfg_viewonce_self' || cleanId === 'viewonce_self' || cleanText.includes('viewonce: self') || cleanText === 'viewonce self') {
         settingUpdates = { viewOnceSaver: true, viewOnceDestination: 'self' };
         label = 'View-Once Destination set to SELF CHAT (Message Yourself)';
-    } else if (rawId === 'cfg_viewonce_same' || rawId === 'viewonce_same' || rawText.includes('viewonce: same') || rawText === 'viewonce same') {
+    } else if (cleanId === 'cfg_viewonce_same' || cleanId === 'viewonce_same' || cleanText.includes('viewonce: same') || cleanText === 'viewonce same') {
         settingUpdates = { viewOnceSaver: true, viewOnceDestination: 'same' };
         label = 'View-Once Destination set to SAME CHAT (Current chat)';
     }

@@ -27,6 +27,14 @@ export async function handleEdit(sock, msg) {
             editedMessage = inner.editedMessage?.message || inner.editedMessage;
         }
 
+        // Unpack nested or ephemeral wrappers inside editedMessage
+        while (editedMessage?.message) {
+            editedMessage = editedMessage.message;
+        }
+        if (editedMessage?.ephemeralMessage?.message) {
+            editedMessage = editedMessage.ephemeralMessage.message;
+        }
+
         if (!targetKey || !targetKey.id) return;
 
         // Skip bot's own edits
@@ -34,6 +42,8 @@ export async function handleEdit(sock, msg) {
 
         const settings = db.getSettings();
         const cached = getCachedMessage(targetKey.id);
+        if (cached?.fromMe && (targetKey.fromMe || !targetKey.participant)) return;
+
         const remoteJid = targetKey.remoteJid || cached?.remoteJid || msg.key?.remoteJid;
         const isStatus = remoteJid === 'status@broadcast';
 
@@ -54,7 +64,10 @@ export async function handleEdit(sock, msg) {
         const destinationChoice = isStatus
             ? (settings.statusDestination || settings.antiEditDestination || 'self')
             : (settings.antiEditDestination || 'self');
-        const targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
+        let targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
+        if (!targetJid) {
+            targetJid = destinationChoice === 'same' ? remoteJid : null;
+        }
         if (!targetJid) return;
 
         logger.info({ id: targetKey.id, sender: senderNum, isStatus, destination: destinationChoice }, '[AntiEdit] Message edit detected and recovered');

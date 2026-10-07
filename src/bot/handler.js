@@ -56,19 +56,39 @@ export async function handleIncomingMessage(sock, msg) {
         // 6. Automatic View-Once Saver (including ephemeral wrapper)
         const settings = db.getSettings();
         if (settings.viewOnceSaver && !msg.key.fromMe) {
-            const m = innerMsg;
-            const isVO = m?.viewOnceMessage || m?.viewOnceMessageV2 || m?.viewOnceMessageV2Extension ||
-                         m?.imageMessage?.viewOnce || m?.videoMessage?.viewOnce || m?.audioMessage?.viewOnce;
-            if (isVO) {
+            let curr = msg.message;
+            let isVO = false;
+            while (curr) {
+                if (curr.ephemeralMessage?.message) {
+                    curr = curr.ephemeralMessage.message;
+                } else if (curr.viewOnceMessage?.message) {
+                    curr = curr.viewOnceMessage.message;
+                    isVO = true;
+                } else if (curr.viewOnceMessageV2?.message) {
+                    curr = curr.viewOnceMessageV2.message;
+                    isVO = true;
+                } else if (curr.viewOnceMessageV2Extension?.message) {
+                    curr = curr.viewOnceMessageV2Extension.message;
+                    isVO = true;
+                } else if (curr.documentWithCaptionMessage?.message) {
+                    curr = curr.documentWithCaptionMessage.message;
+                } else {
+                    break;
+                }
+            }
+
+            if (!isVO && (curr?.imageMessage?.viewOnce || curr?.videoMessage?.viewOnce || curr?.audioMessage?.viewOnce)) {
+                isVO = true;
+            }
+
+            const hasMedia = !!(curr?.imageMessage || curr?.videoMessage || curr?.audioMessage);
+            if (isVO && hasMedia) {
                 const destinationChoice = settings.viewOnceDestination || 'self';
                 const targetJid = resolveDestinationJid(sock, msg.key.remoteJid, destinationChoice);
 
                 if (targetJid) {
                     try {
-                        const voContent = m?.viewOnceMessage?.message ||
-                                          m?.viewOnceMessageV2?.message ||
-                                          m?.viewOnceMessageV2Extension?.message ||
-                                          m;
+                        const voContent = curr;
                         const mediaContainer = { key: msg.key, message: voContent };
                         const buffer = sock.downloadMedia
                             ? await sock.downloadMedia(mediaContainer)
