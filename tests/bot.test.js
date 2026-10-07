@@ -8,7 +8,7 @@ import { handleEdit } from '../src/handlers/antiEdit.js';
 import { handleRevoke } from '../src/handlers/antiDelete.js';
 import cfSync from '../src/services/cfSync.js';
 import worker from '../worker/index.js';
-import { getBotStatus, resetSession, clearSessionFiles } from '../src/bot/socket.js';
+import { getBotStatus, resetSession, clearSessionFiles, restartBotSocket } from '../src/bot/socket.js';
 import { handleIncomingMessage } from '../src/bot/handler.js';
 import { allCommandCategories, commandMap, getCommand } from '../src/commands/index.js';
 import { createServer } from '../src/server/app.js';
@@ -829,5 +829,45 @@ describe('7. Re-Pairing Resilience, Consolidated Welcome & Performance Tests', (
         const text = mockSock.sentMessages[0].content.text;
         assert.ok(text.includes('Fast Engine / Snappy'));
     });
+
+    test('formatConnectedSetupMessage falls back to relative /settings for empty or relative URLs', () => {
+        const localText1 = formatConnectedSetupMessage('94771909806', 'pass', '');
+        assert.ok(localText1.includes('*Dashboard:* /settings'));
+
+        const localText2 = formatConnectedSetupMessage('94771909806', 'pass', '/settings');
+        assert.ok(localText2.includes('*Dashboard:* /settings'));
+        assert.ok(!localText2.includes('/settings/settings'));
+    });
+
+    test('db.updateSettings strips internal _suppressLog and passes suppressLog via event options', () => {
+        let capturedOptions = null;
+        const testListener = (_, opts) => {
+            capturedOptions = opts;
+        };
+        db.once('settingsUpdated', testListener);
+
+        db.updateSettings({ mode: 'public' }, { suppressLog: true });
+        assert.equal(capturedOptions?.suppressLog, true);
+        const stored = db.getSettings();
+        assert.equal(stored._suppressLog, undefined);
+        assert.equal(stored._lastSetupSentPhone, undefined);
+
+        // Subsequent update without suppressLog allows notification
+        let capturedNormal = null;
+        db.once('settingsUpdated', (_, opts) => {
+            capturedNormal = opts;
+        });
+        db.updateSettings({ ownerBio: 'Updated bio for test' });
+        assert.equal(capturedNormal?.suppressLog, false);
+    });
+
+    test('restartBotSocket resets and restarts socket while preserving state safely', async () => {
+        const restartSock = await restartBotSocket();
+        assert.ok(restartSock);
+        assert.ok(typeof restartSock.sendMessage === 'function');
+        // Clean up socket after test
+        await resetSession({ clearFiles: true });
+    });
 });
+
 

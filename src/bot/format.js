@@ -113,13 +113,13 @@ export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboar
     const viewOnceStatus = settings.viewOnceSaver ? `ENABLED (${settings.viewOnceDestination || 'self'})` : 'DISABLED';
     const autoStatusStatus = settings.autoStatus ? 'ENABLED' : 'DISABLED';
 
-    // Normalize dashboard URL to avoid hardcoded or duplicate /settings
+    // Normalize dashboard URL to avoid duplicate /settings suffix
     let settingsLink = '/settings';
     if (dashboardUrl && typeof dashboardUrl === 'string') {
         const cleanDash = dashboardUrl.trim().replace(/\/+$/, '');
         if (cleanDash.endsWith('/settings')) {
             settingsLink = cleanDash;
-        } else {
+        } else if (cleanDash && cleanDash !== '/') {
             settingsLink = `${cleanDash}/settings`;
         }
     }

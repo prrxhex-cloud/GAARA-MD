@@ -16,7 +16,9 @@ export const aiCommands = {
             const settings = db.getSettings();
             const apiKey = settings.sasaDevApiKey || config.sasaDevApiKey;
 
-            if (sock?.presence) {
+            if (sock?.sendPresenceUpdate) {
+                sock.sendPresenceUpdate('composing', jid).catch(() => {});
+            } else if (sock?.presence) {
                 sock.presence('composing', jid).catch(() => {});
             }
 
@@ -61,7 +63,9 @@ export const aiCommands = {
             ]);
 
             await sock.sendMessage(jid, { text }, { quoted: msg });
-            if (sock?.presence) {
+            if (sock?.sendPresenceUpdate) {
+                sock.sendPresenceUpdate('paused', jid).catch(() => {});
+            } else if (sock?.presence) {
                 sock.presence('paused', jid).catch(() => {});
             }
         }

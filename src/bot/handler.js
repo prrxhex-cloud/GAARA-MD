@@ -6,7 +6,7 @@ import { cacheMessage, checkRateLimit } from './cache.js';
 import { handleRevoke } from '../handlers/antiDelete.js';
 import { handleEdit } from '../handlers/antiEdit.js';
 import { handleStatusUpdate } from '../handlers/autoStatus.js';
-import { handleAutoReply, getRandomJitter, sleep } from '../handlers/autoReply.js';
+import { handleAutoReply } from '../handlers/autoReply.js';
 import { formatFramedMessage, resolveDestinationJid } from './format.js';
 import { getCommand } from '../commands/index.js';
 import { isOwner } from '../commands/owner.js';
@@ -155,12 +155,6 @@ export async function handleIncomingMessage(sock, msg) {
                 }
 
                 logger.info({ cmd: cmdName, sender: sender.split('@')[0], isGroup: isGroupChat, mode }, '[Command] Executing');
-
-                // Snappy response dispatch with minimal anti-flood guard (0 - 80ms)
-                const delay = Math.min(getRandomJitter(30, 80), 80);
-                if (delay > 0) {
-                    await sleep(delay);
-                }
 
                 try {
                     await cmd.run({ sock, msg, jid: remoteJid, args, sender, text: args.join(' ') });

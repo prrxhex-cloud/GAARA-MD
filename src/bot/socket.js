@@ -22,6 +22,7 @@ let sockInstance = null;
 let currentPairingCode = null;
 let connectionState = 'connecting'; // 'disconnected' | 'connecting' | 'open' | 'unlinked'
 let isInitialSync = false;
+let lastSetupSentPhone = null;
 let botTelemetry = {
     connectedAt: null,
     phoneNumber: null,
@@ -102,9 +103,7 @@ export async function resetSession({ clearFiles = true } = {}) {
         currentPairingCode = null;
         botTelemetry.connectedAt = null;
         botTelemetry.phoneNumber = null;
-
-        // Reset setup message phone marker so new pair triggers setup card
-        db.updateSettings({ _lastSetupSentPhone: null, _suppressLog: true });
+        lastSetupSentPhone = null;
 
         logger.info('[Bot] Session successfully reset to unlinked state');
         return true;
@@ -114,14 +113,23 @@ export async function resetSession({ clearFiles = true } = {}) {
     }
 }
 
+/**
+ * Cleanly restarts the bot socket preserving active credentials.
+ */
+export async function restartBotSocket() {
+    logger.info('[Bot] Restarting bot socket engine...');
+    await resetSession({ clearFiles: false });
+    return await initBotSocket();
+}
+
 // Runtime sync listener: push settings updates immediately to Cloudflare D1 and dispatch bot logs
-db.on('settingsUpdated', async (newSettings) => {
+db.on('settingsUpdated', async (newSettings, options = {}) => {
     try {
         if (botTelemetry.phoneNumber) {
             cfSync.saveSettingsToCloudflare(botTelemetry.phoneNumber, newSettings).catch(() => {});
         }
         // Suppress during initial boot / sync or when explicitly flagged
-        if (isInitialSync || newSettings?._suppressLog) {
+        if (isInitialSync || options?.suppressLog || newSettings?._suppressLog) {
             return;
         }
         if (connectionState === 'open' && sockInstance && newSettings.botLogs !== false) {
@@ -275,34 +283,18 @@ export async function requestPairing(phoneNumber, { frontendUrl } = {}) {
         throw new Error('Invalid phone number format. Must include country code.');
     }
 
-    if (frontendUrl && typeof frontendUrl === 'string' && !frontendUrl.includes('localhost')) {
-        db.updateSettings({ lastKnownDashboardUrl: frontendUrl.trim().replace(/\/+$/, ''), _suppressLog: true });
+    if (frontendUrl && typeof frontendUrl === 'string' && !frontendUrl.includes('localhost') && !frontendUrl.includes('127.0.0.1')) {
+        db.updateSettings({ lastKnownDashboardUrl: frontendUrl.trim().replace(/\/+$/, '') }, { suppressLog: true });
     }
 
-    // Check if session directory contains stale / registered credentials
-    const credsPath = path.join(config.sessionDir, 'creds.json');
-    let hasRegisteredCreds = false;
-    if (fs.existsSync(credsPath)) {
-        try {
-            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-            if (creds && (creds.registered || creds.me)) {
-                hasRegisteredCreds = true;
-            }
-        } catch {}
-    }
+    // Always cleanly reset previous/stale unlinked socket state before pairing request.
+    // This terminates old sockets, clears unlinked session files, and guarantees
+    // fresh WebSocket negotiation with WhatsApp servers so requestPairingCode never hangs.
+    logger.info({ phone: cleanNum }, '[Bot] Resetting session before pairing request to ensure fresh state');
+    await resetSession({ clearFiles: true });
+    await initBotSocket();
 
-    // If registered creds linger, or if socket is disconnected/unlinked/stale:
-    // Reset cleanly so WhatsApp delivers the pair-device IQ stanza without hanging.
-    if (hasRegisteredCreds || !sockInstance || connectionState === 'unlinked' || connectionState === 'disconnected') {
-        logger.info('[Bot] Resetting previous/stale session before pairing request');
-        await resetSession({ clearFiles: true });
-        await initBotSocket();
-    }
-
-    if (!sockInstance) {
-        await initBotSocket();
-    }
-
+    let timeoutTimer = null;
     try {
         logger.info({ phone: cleanNum }, '[Bot] Requesting pairing code from WhatsApp servers...');
         const timeoutMs = 22000;
@@ -315,16 +307,20 @@ export async function requestPairing(phoneNumber, { frontendUrl } = {}) {
         })();
 
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => {
+            timeoutTimer = setTimeout(() => {
                 reject(new Error('Pairing code request timed out from WhatsApp. Please verify your phone number and try again.'));
             }, timeoutMs);
         });
 
         const code = await Promise.race([pairPromise, timeoutPromise]);
+        clearTimeout(timeoutTimer);
         currentPairingCode = code;
         return code;
     } catch (err) {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
         logger.error({ err: err.message }, '[Bot] Pairing code request failed');
+        // Cleanly reset failed socket to avoid stale pairing-in-progress state on next attempt
+        await resetSession({ clearFiles: true }).catch(() => {});
         throw err;
     }
 }
@@ -340,7 +336,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
         const settings = db.getSettings();
 
         // Check if already sent for this phone number
-        if (settings._lastSetupSentPhone === phoneNumber) {
+        if (lastSetupSentPhone === phoneNumber) {
             return;
         }
 
@@ -349,7 +345,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
         // Discover best public Dashboard URL
         let dashboardUrl = settings.lastKnownDashboardUrl || config.appUrl;
         if (!dashboardUrl || dashboardUrl.includes('localhost') || dashboardUrl.includes('127.0.0.1')) {
-            if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+            if (process.env.APP_URL && !process.env.APP_URL.includes('localhost') && !process.env.APP_URL.includes('127.0.0.1')) {
                 dashboardUrl = process.env.APP_URL;
             } else if (process.env.RENDER_EXTERNAL_URL) {
                 dashboardUrl = process.env.RENDER_EXTERNAL_URL;
@@ -371,7 +367,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
                         { text: 'View channel', url: channelUrl }
                     ]
                 });
-                db.updateSettings({ _lastSetupSentPhone: phoneNumber, _suppressLog: true });
+                lastSetupSentPhone = phoneNumber;
                 return;
             } catch (btnErr) {
                 logger.warn({ err: btnErr.message }, '[Bot] Failed sending setup message with buttons, falling back to text');
@@ -379,7 +375,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
         }
 
         await sock.sendMessage(selfJid, { text: setupText });
-        db.updateSettings({ _lastSetupSentPhone: phoneNumber, _suppressLog: true });
+        lastSetupSentPhone = phoneNumber;
     } catch (err) {
         logger.error({ err: err.message }, '[Bot] Error sending initial setup message');
     }

@@ -131,18 +131,25 @@ export async function handleAutoReply(sock, msg) {
 
 async function simulateTypingAndSend(sock, jid, text, quoted) {
     try {
-        // Presence typing
-        if (sock.presence) {
-            await sock.presence('composing', jid);
+        // Presence typing (non-blocking)
+        if (sock.sendPresenceUpdate) {
+            sock.sendPresenceUpdate('composing', jid).catch(() => {});
+        } else if (sock.presence) {
+            sock.presence('composing', jid).catch(() => {});
         }
-        // Humanized jitter
+
+        // Snappy humanized jitter
         const delay = getRandomJitter();
-        await sleep(delay);
+        if (delay > 0) {
+            await sleep(delay);
+        }
 
         await sock.sendMessage(jid, { text }, { quoted });
 
-        if (sock.presence) {
-            await sock.presence('paused', jid);
+        if (sock.sendPresenceUpdate) {
+            sock.sendPresenceUpdate('paused', jid).catch(() => {});
+        } else if (sock.presence) {
+            sock.presence('paused', jid).catch(() => {});
         }
     } catch (err) {
         logger.error({ err: err.message }, '[AutoReply] Error sending reply');

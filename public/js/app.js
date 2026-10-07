@@ -497,6 +497,20 @@ async function restartBot() {
     }
 }
 
+async function disconnectBot() {
+    if (!confirm('Are you sure you want to disconnect and unlink this WhatsApp session?')) return;
+    try {
+        const res = await fetch(apiUrl('/api/disconnect'), { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        showToast(data.message || 'Bot disconnected successfully');
+        setTimeout(() => {
+            window.location.href = '/pair';
+        }, 1200);
+    } catch {
+        showToast('Disconnect request failed', true);
+    }
+}
+
 // ----------------------------------------------------
 // Cloudflare D1 Sync Handlers
 // ----------------------------------------------------

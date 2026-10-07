@@ -3,8 +3,7 @@ import util from 'util';
 import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { formatFramedMessage } from '../bot/format.js';
-import { messageCache, rateLimitCache } from '../bot/cache.js';
-import { initBotSocket } from '../bot/socket.js';
+import { restartBotSocket } from '../bot/socket.js';
 import logger from '../utils/logger.js';
 
 const execPromise = util.promisify(exec);
@@ -370,7 +369,7 @@ export const ownerCommands = {
 
             await sock.sendMessage(jid, { text: '🔄 Restarting GAARA X MD socket connection...' }, { quoted: msg });
             try {
-                await initBotSocket();
+                await restartBotSocket();
             } catch (err) {
                 await sock.sendMessage(jid, { text: `❌ Restart failed: ${err.message}` }, { quoted: msg });
             }

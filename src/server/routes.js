@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import config from '../../config/index.js';
 import db from '../../config/database.js';
-import { getBotStatus, requestPairing, initBotSocket, resetSession } from '../bot/socket.js';
+import { getBotStatus, requestPairing, initBotSocket, resetSession, restartBotSocket } from '../bot/socket.js';
 import { createSessionToken, isValidSession, requireAuth } from './auth.js';
 import cfSync from '../services/cfSync.js';
 import logger from '../utils/logger.js';
@@ -267,7 +267,7 @@ export function setupRoutes(app) {
     app.post('/api/bot/restart', requireAuth, async (req, res) => {
         logger.info('[API] Bot restart requested via dashboard');
         try {
-            await initBotSocket();
+            await restartBotSocket();
             res.json({ success: true, message: 'Bot connection restarted' });
         } catch (err) {
             res.status(500).json({ error: err.message });

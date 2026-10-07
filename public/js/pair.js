@@ -88,19 +88,32 @@ async function requestPairCode() {
         });
         clearTimeout(timeoutId);
 
-        const data = await res.json();
+        let data = null;
+        try {
+            data = await res.json();
+        } catch {
+            data = null;
+        }
 
-        if (data.success && data.code) {
+        if (!res.ok) {
+            const errorMsg = data?.error || (res.status === 504
+                ? '⏱️ WhatsApp pairing timed out. Please check your phone number and retry.'
+                : `Backend responded with error (${res.status}). If Render is waking up, please retry in 15s.`);
+            showToast(errorMsg, true);
+            return;
+        }
+
+        if (data && data.success && data.code) {
             displayCode(data.code);
             showToast('✅ Pairing code generated! Enter it on WhatsApp.');
             startStatusPolling();
         } else {
-            showToast(data.error || 'Failed to request pairing code. Click "Reset Session" below if needed.', true);
+            showToast(data?.error || 'Failed to request pairing code. Click "Reset Session" below if needed.', true);
         }
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-            showToast('⏱️ Request timed out. Render backend may be waking up (cold start). Please click again to retry.', true);
+            showToast('⏱️ Request timed out. Backend may be waking up (Render cold-start). Please click again to retry.', true);
         } else {
             showToast('Request error. Verify Backend URL or server logs. You can try "Reset Session".', true);
         }

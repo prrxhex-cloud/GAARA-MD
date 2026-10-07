@@ -108,17 +108,25 @@ class JsonDatabase extends EventEmitter {
     getSettings() {
         if (!this._cachedSettings) {
             const raw = this._readSafe(this.settingsFile, DEFAULT_SETTINGS);
+            delete raw._suppressLog;
+            delete raw._lastSetupSentPhone;
             this._cachedSettings = { ...DEFAULT_SETTINGS, ...raw };
         }
-        return { ...DEFAULT_SETTINGS, ...this._cachedSettings };
+        const settings = { ...DEFAULT_SETTINGS, ...this._cachedSettings };
+        delete settings._suppressLog;
+        delete settings._lastSetupSentPhone;
+        return settings;
     }
 
-    updateSettings(partial) {
+    updateSettings(partial, { suppressLog = false } = {}) {
         const current = this.getSettings();
-        const merged = { ...current, ...partial };
+        const { _suppressLog, _lastSetupSentPhone, ...cleanPartial } = partial;
+        const merged = { ...current, ...cleanPartial };
+        delete merged._suppressLog;
+        delete merged._lastSetupSentPhone;
         this._cachedSettings = merged;
         this._writeSafe(this.settingsFile, merged);
-        this.emit('settingsUpdated', merged);
+        this.emit('settingsUpdated', merged, { suppressLog: Boolean(suppressLog || _suppressLog) });
         return merged;
     }
 
