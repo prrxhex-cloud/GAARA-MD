@@ -40,9 +40,17 @@ export function formatFramedMessage(sections = [], options = {}) {
         // Normalize brackets if caller passed '[ 🛡️ ANTI DELETE ]'
         titleString = titleString.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
 
-        const content = Array.isArray(sec.content) ? sec.content : [sec.content];
+        const rawContent = Array.isArray(sec.content) ? sec.content : [sec.content];
+        const flatLines = [];
+        for (const item of rawContent) {
+            if (typeof item === 'string' && item.includes('\n')) {
+                flatLines.push(...item.split('\n'));
+            } else {
+                flatLines.push(item);
+            }
+        }
 
-        const contentLines = content
+        const contentLines = flatLines
             .map(line => (line === '' ? `│◇│` : `│◇│  ${line}`))
             .join('\n');
 
@@ -67,9 +75,9 @@ export function formatFramedMessage(sections = [], options = {}) {
 /**
  * Resolves the target JID based on destination preference:
  * 'self' | 'Self Chat' -> sends to self (Message Yourself)
- * 'same' | 'Same Chat' -> sends to remoteJid (the chat where the event occurred)
+ * 'same' | 'Same Chat' -> sends to remoteJid (or senderJid if status broadcast)
  */
-export function resolveDestinationJid(sock, remoteJid, destinationPreference = 'self') {
+export function resolveDestinationJid(sock, remoteJid, destinationPreference = 'self', senderJid = null) {
     let selfJid = null;
     if (sock?.user?.id) {
         if (typeof sock.parseJid === 'function') {
@@ -82,8 +90,13 @@ export function resolveDestinationJid(sock, remoteJid, destinationPreference = '
     }
 
     const isSameChat = destinationPreference === 'same' || destinationPreference === 'Same Chat';
-    if (isSameChat && remoteJid && remoteJid !== 'status@broadcast') {
-        return remoteJid;
+    if (isSameChat) {
+        if (remoteJid && remoteJid !== 'status@broadcast') {
+            return remoteJid;
+        }
+        if (remoteJid === 'status@broadcast' && senderJid && senderJid !== 'status@broadcast') {
+            return senderJid;
+        }
     }
     return selfJid;
 }

@@ -1,10 +1,32 @@
 let token = localStorage.getItem('panel_token') || '';
 let apiBaseUrl = localStorage.getItem('api_base_url') || '';
 
+// Parse ?api= URL query parameter for seamless Vercel frontend config
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('api')) {
+    const passedApi = urlParams.get('api').trim().replace(/\/+$/, '');
+    if (passedApi) {
+        localStorage.setItem('api_base_url', passedApi);
+        apiBaseUrl = passedApi;
+    }
+}
+
 function apiUrl(endpoint) {
     if (!apiBaseUrl) return endpoint;
     const base = apiBaseUrl.replace(/\/+$/, '');
     return `${base}${endpoint}`;
+}
+
+function promptBackendUrl() {
+    const current = localStorage.getItem('api_base_url') || '';
+    const next = prompt('Enter your WhatsApp bot backend URL (e.g. https://gaara-x-md.onrender.com or leave blank for local/same origin):', current);
+    if (next !== null) {
+        const cleaned = next.trim().replace(/\/+$/, '');
+        localStorage.setItem('api_base_url', cleaned);
+        apiBaseUrl = cleaned;
+        showToast('Backend URL updated: ' + (cleaned || 'Same origin'));
+        setTimeout(() => window.location.reload(), 600);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,10 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Live polling for real-time connection status & disconnect detection
     setInterval(loadConnectionStatus, 3000);
 
-    // Init Backend API Base URL input
+    // Init Backend API Base URL inputs
     const apiInput = document.getElementById('apiBaseUrlInput');
     if (apiInput) {
         apiInput.value = apiBaseUrl;
+    }
+    const loginApiInput = document.getElementById('loginApiBaseUrlInput');
+    if (loginApiInput) {
+        loginApiInput.value = apiBaseUrl;
     }
 });
 
@@ -54,6 +80,11 @@ function initTabNav() {
 // ----------------------------------------------------
 async function initAuthCheck() {
     const modal = document.getElementById('loginModal');
+    const loginApiInput = document.getElementById('loginApiBaseUrlInput');
+    if (loginApiInput && apiBaseUrl) {
+        loginApiInput.value = apiBaseUrl;
+    }
+
     if (!token) {
         if (modal) modal.style.display = 'flex';
         return;
@@ -73,6 +104,13 @@ async function initAuthCheck() {
 }
 
 async function handleLogin() {
+    const loginApiInput = document.getElementById('loginApiBaseUrlInput');
+    if (loginApiInput && loginApiInput.value.trim()) {
+        const customUrl = loginApiInput.value.trim().replace(/\/+$/, '');
+        localStorage.setItem('api_base_url', customUrl);
+        apiBaseUrl = customUrl;
+    }
+
     const passInput = document.getElementById('panelPasswordInput');
     const password = passInput?.value?.trim();
     if (!password) {
@@ -98,7 +136,7 @@ async function handleLogin() {
             showToast(data.error || 'Invalid password', true);
         }
     } catch (err) {
-        showToast('Login request failed', true);
+        showToast('Login request failed. Verify Backend URL.', true);
     }
 }
 

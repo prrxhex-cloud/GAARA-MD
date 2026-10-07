@@ -16,6 +16,7 @@
             <a href="/pair">📲 Link Device</a>
             <a href="/settings">⚙️ Settings</a>
             <a href="/status" class="active">📊 Status</a>
+            <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" title="Configure Backend API URL for Vercel">🌐 Server URL</button>
         </nav>
     </header>
 
@@ -84,9 +85,31 @@
     </footer>
 
     <script>
-        const apiBaseUrl = localStorage.getItem('api_base_url') || '';
+        let apiBaseUrl = localStorage.getItem('api_base_url') || '';
+
+        // Parse ?api= URL query parameter for seamless Vercel frontend config
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('api')) {
+            const passedApi = urlParams.get('api').trim().replace(/\/+$/, '');
+            if (passedApi) {
+                localStorage.setItem('api_base_url', passedApi);
+                apiBaseUrl = passedApi;
+            }
+        }
+
         function apiUrl(endpoint) {
             return apiBaseUrl ? (apiBaseUrl.replace(/\/+$/, '') + endpoint) : endpoint;
+        }
+
+        function promptBackendUrl() {
+            const current = localStorage.getItem('api_base_url') || '';
+            const next = prompt('Enter your WhatsApp bot backend URL (e.g. https://gaara-x-md.onrender.com or leave blank for local/same origin):', current);
+            if (next !== null) {
+                const cleaned = next.trim().replace(/\/+$/, '');
+                localStorage.setItem('api_base_url', cleaned);
+                apiBaseUrl = cleaned;
+                setTimeout(() => window.location.reload(), 600);
+            }
         }
 
         async function fetchLiveStats() {

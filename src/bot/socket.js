@@ -15,6 +15,7 @@ import { handleEdit } from '../handlers/antiEdit.js';
 import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
 import { formatConnectedSetupMessage } from './format.js';
+import { dispatchBotLog } from './loggerNotifier.js';
 
 let sockInstance = null;
 let currentPairingCode = null;
@@ -49,11 +50,22 @@ export function getSocket() {
     return sockInstance;
 }
 
-// Runtime sync listener: push settings updates immediately to Cloudflare D1
+// Runtime sync listener: push settings updates immediately to Cloudflare D1 and dispatch bot logs
 db.on('settingsUpdated', async (newSettings) => {
     try {
         if (botTelemetry.phoneNumber) {
             cfSync.saveSettingsToCloudflare(botTelemetry.phoneNumber, newSettings).catch(() => {});
+        }
+        if (connectionState === 'open' && sockInstance && newSettings.botLogs !== false) {
+            dispatchBotLog(sockInstance, {
+                title: 'SETTINGS UPDATED',
+                emoji: '⚙️',
+                content: [
+                    `🛠️ *Settings modified via Web Dashboard*`,
+                    `🌐 *Mode:* ${(newSettings.mode || 'public').toUpperCase()}`,
+                    `🕒 *Time:* ${new Date().toLocaleTimeString()}`
+                ]
+            }).catch(() => {});
         }
     } catch {}
 });
@@ -124,6 +136,24 @@ export async function initBotSocket() {
 
                 // Check and send Connected Setup Message to 'Message Yourself'
                 await sendInitialSetupMessage(sock, phone, myJid);
+
+                // Dispatch Bot Event Log to configured destination
+                const currentSettings = db.getSettings();
+                await dispatchBotLog(sock, {
+                    title: 'SYSTEM LOG // ONLINE',
+                    emoji: '🟢',
+                    content: [
+                        `⚡ *GAARA X MD IS ONLINE*`,
+                        `📱 *Phone:* +${phone}`,
+                        `🕒 *Connected:* ${new Date().toLocaleTimeString()}`,
+                        `🌐 *Mode:* ${(currentSettings.mode || 'public').toUpperCase()}`,
+                        `🛡️ *Anti-Delete:* ${currentSettings.antiDelete ? 'ENABLED (' + (currentSettings.antiDeleteDestination || 'self') + ')' : 'DISABLED'}`,
+                        `✏️ *Anti-Edit:* ${currentSettings.antiEdit ? 'ENABLED (' + (currentSettings.antiEditDestination || 'self') + ')' : 'DISABLED'}`,
+                        `📷 *View-Once:* ${currentSettings.viewOnceSaver ? 'ENABLED (' + (currentSettings.viewOnceDestination || 'self') + ')' : 'DISABLED'}`,
+                        `💖 *Auto-Status:* ${currentSettings.autoStatus ? 'ENABLED' : 'DISABLED'}`,
+                        `☁️ *Cloudflare D1:* Sync Active`
+                    ]
+                });
             }
 
             if (connection === 'close') {

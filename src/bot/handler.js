@@ -10,6 +10,7 @@ import { handleAutoReply, getRandomJitter, sleep } from '../handlers/autoReply.j
 import { formatFramedMessage, resolveDestinationJid } from './format.js';
 import { getCommand } from '../commands/index.js';
 import { isOwner } from '../commands/owner.js';
+import { dispatchBotLog } from './loggerNotifier.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -164,6 +165,17 @@ export async function handleIncomingMessage(sock, msg) {
                 } catch (cmdErr) {
                     logger.error({ cmd: cmdName, err: cmdErr.message, stack: cmdErr.stack }, '[Command] Execution error');
                     await sock.sendMessage(remoteJid, { text: `❌ Command Error: ${cmdErr.message}` }, { quoted: msg });
+                    dispatchBotLog(sock, {
+                        title: 'COMMAND ERROR',
+                        emoji: '⚠️',
+                        remoteJid,
+                        content: [
+                            `❌ *Command Error:* .${cmdName}`,
+                            `👤 *Sender:* @${sender.split('@')[0]}`,
+                            `💬 *Chat:* ${remoteJid.endsWith('@g.us') ? 'Group' : 'Private'}`,
+                            `⚠️ *Details:* ${cmdErr.message}`
+                        ]
+                    }).catch(() => {});
                 }
                 return;
             }

@@ -13,6 +13,7 @@ import { handleIncomingMessage } from '../src/bot/handler.js';
 import { allCommandCategories, commandMap, getCommand } from '../src/commands/index.js';
 import { createServer } from '../src/server/app.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../config/constants.js';
+import { dispatchBotLog } from '../src/bot/loggerNotifier.js';
 
 describe('1. Database & Security Tests', () => {
     test('Settings initialize and persist properly', () => {
@@ -573,5 +574,166 @@ describe('6. Anti-Edit, Configurable Destinations & Multi-Cloud Tests', () => {
         assert.ok('statusText' in status);
         assert.ok('telemetry' in status);
         assert.ok(typeof status.statusText === 'string');
+    });
+
+    test('formatFramedMessage preserves ASCII box integrity on multiline content', () => {
+        const result = formatFramedMessage([
+            {
+                title: 'MULTILINE TEST',
+                content: ['Line 1\nLine 2\nLine 3', 'Single Line']
+            }
+        ]);
+        assert.ok(result.includes('│◇│  Line 1\n│◇│  Line 2\n│◇│  Line 3'));
+        assert.ok(result.includes('│◇│  Single Line'));
+        assert.ok(!result.includes('\nLine 2\n'));
+    });
+
+    test('Status Anti-Delete routes to author JID when same destination is configured', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const statusMsg = {
+            key: { id: 'status-msg-123', remoteJid: 'status@broadcast', participant: '94776665544@s.whatsapp.net', fromMe: false },
+            pushName: 'StatusAuthor',
+            message: { conversation: 'Status secret thoughts' },
+            messageTimestamp: 1760000500
+        };
+        cacheMessage(statusMsg);
+
+        // Configure status destination to 'same'
+        db.updateSettings({ statusAntiDelete: true, statusDestination: 'same' });
+
+        const revokeMsg = {
+            key: { id: 'status-rev-1', remoteJid: 'status@broadcast', fromMe: false },
+            message: {
+                protocolMessage: {
+                    type: 0,
+                    key: { id: 'status-msg-123', remoteJid: 'status@broadcast', participant: '94776665544@s.whatsapp.net', fromMe: false }
+                }
+            }
+        };
+
+        await handleRevoke(mockSock, revokeMsg);
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].jid, '94776665544@s.whatsapp.net');
+        assert.ok(mockSock.sentMessages[0].content.text.includes('Status secret thoughts'));
+    });
+
+    test('Status Anti-Edit recovers status edits and supports sequential edit caching', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const initialStatus = {
+            key: { id: 'status-edit-target', remoteJid: 'status@broadcast', participant: '94773332211@s.whatsapp.net', fromMe: false },
+            pushName: 'StatusUpdater',
+            message: { conversation: 'Initial status caption' },
+            messageTimestamp: 1760000600
+        };
+        cacheMessage(initialStatus);
+
+        db.updateSettings({ antiEdit: true, statusDestination: 'same' });
+
+        // First edit
+        const edit1 = {
+            key: { id: 'st-edit-1', remoteJid: 'status@broadcast', fromMe: false },
+            message: {
+                protocolMessage: {
+                    type: 14,
+                    key: { id: 'status-edit-target', remoteJid: 'status@broadcast', participant: '94773332211@s.whatsapp.net', fromMe: false },
+                    editedMessage: { conversation: 'Updated first status caption' }
+                }
+            },
+            messageTimestamp: 1760000630
+        };
+
+        await handleEdit(mockSock, edit1);
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].jid, '94773332211@s.whatsapp.net');
+        assert.ok(mockSock.sentMessages[0].content.text.includes('WhatsApp Status'));
+        assert.ok(mockSock.sentMessages[0].content.text.includes('Initial status caption'));
+        assert.ok(mockSock.sentMessages[0].content.text.includes('Updated first status caption'));
+
+        // Second sequential edit to the same status
+        const edit2 = {
+            key: { id: 'st-edit-2', remoteJid: 'status@broadcast', fromMe: false },
+            message: {
+                protocolMessage: {
+                    type: 14,
+                    key: { id: 'status-edit-target', remoteJid: 'status@broadcast', participant: '94773332211@s.whatsapp.net', fromMe: false },
+                    editedMessage: { conversation: 'Second updated status caption' }
+                }
+            },
+            messageTimestamp: 1760000660
+        };
+
+        await handleEdit(mockSock, edit2);
+        assert.equal(mockSock.sentMessages.length, 2);
+        assert.ok(mockSock.sentMessages[1].content.text.includes('Updated first status caption'));
+        assert.ok(mockSock.sentMessages[1].content.text.includes('Second updated status caption'));
+    });
+
+    test('dispatchBotLog dispatches formatted logs to configured destinations', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        // When botLogs is false, should not dispatch
+        db.updateSettings({ botLogs: false });
+        await dispatchBotLog(mockSock, { title: 'TEST LOG', content: ['Log line 1'] });
+        assert.equal(mockSock.sentMessages.length, 0);
+
+        // When botLogs is true and destination is self
+        db.updateSettings({ botLogs: true, botLogsDestination: 'self' });
+        await dispatchBotLog(mockSock, { title: 'SYSTEM EVENT', emoji: '🟢', content: ['System online'] });
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].jid, '94770000000@s.whatsapp.net');
+        assert.ok(mockSock.sentMessages[0].content.text.includes('SYSTEM EVENT'));
+        assert.ok(mockSock.sentMessages[0].content.text.includes('System online'));
+    });
+
+    test('New owner commands (.antiviewonce, .statusantidelete, .botlogs) update configuration', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const ownerMsg = {
+            key: { id: 'msg-owner', remoteJid: '94770000000@s.whatsapp.net', fromMe: true }
+        };
+
+        const voCmd = getCommand('antiviewonce');
+        assert.ok(voCmd);
+        await voCmd.run({ sock: mockSock, msg: ownerMsg, jid: '94770000000@s.whatsapp.net', args: ['off'], sender: '94770000000@s.whatsapp.net' });
+        assert.equal(db.getSettings().viewOnceSaver, false);
+
+        const statusDelCmd = getCommand('statusantidelete');
+        assert.ok(statusDelCmd);
+        await statusDelCmd.run({ sock: mockSock, msg: ownerMsg, jid: '94770000000@s.whatsapp.net', args: ['on'], sender: '94770000000@s.whatsapp.net' });
+        assert.equal(db.getSettings().statusAntiDelete, true);
+
+        const botLogsCmd = getCommand('botlogs');
+        assert.ok(botLogsCmd);
+        await botLogsCmd.run({ sock: mockSock, msg: ownerMsg, jid: '94770000000@s.whatsapp.net', args: ['same'], sender: '94770000000@s.whatsapp.net' });
+        assert.equal(db.getSettings().botLogsDestination, 'same');
     });
 });

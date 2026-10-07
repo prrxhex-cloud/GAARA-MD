@@ -136,6 +136,71 @@ export const ownerCommands = {
         }
     },
 
+    antiviewonce: {
+        description: 'Enable or disable automatic View-Once media saver',
+        aliases: ['viewonce', 'autoviewonce'],
+        run: async ({ sock, msg, jid, args, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+
+            const current = db.getSettings().viewOnceSaver;
+            let nextVal = !current;
+            if (args[0] === 'on' || args[0] === 'enable') nextVal = true;
+            if (args[0] === 'off' || args[0] === 'disable') nextVal = false;
+
+            db.updateSettings({ viewOnceSaver: nextVal });
+
+            await sock.sendMessage(jid, {
+                text: `📷 *Anti View-Once Auto-Saver is now:* *${nextVal ? 'ENABLED' : 'DISABLED'}*`
+            }, { quoted: msg });
+        }
+    },
+
+    statusantidelete: {
+        description: 'Enable or disable status anti-delete protection',
+        aliases: ['statusdelete'],
+        run: async ({ sock, msg, jid, args, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+
+            const current = db.getSettings().statusAntiDelete;
+            let nextVal = !current;
+            if (args[0] === 'on' || args[0] === 'enable') nextVal = true;
+            if (args[0] === 'off' || args[0] === 'disable') nextVal = false;
+
+            db.updateSettings({ statusAntiDelete: nextVal });
+
+            await sock.sendMessage(jid, {
+                text: `💖 *Status Anti-Delete Protection is now:* *${nextVal ? 'ENABLED' : 'DISABLED'}*`
+            }, { quoted: msg });
+        }
+    },
+
+    botlogs: {
+        description: 'Enable or disable bot event notifications & configure destination',
+        aliases: ['botlog'],
+        run: async ({ sock, msg, jid, args, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+
+            const sub = args[0]?.toLowerCase();
+            if (sub === 'self' || sub === 'same') {
+                db.updateSettings({ botLogsDestination: sub });
+                return sock.sendMessage(jid, {
+                    text: `📜 *Bot Logs Destination set to:* *${sub === 'self' ? 'Self Chat (Message Yourself)' : 'Same Chat'}*`
+                }, { quoted: msg });
+            }
+
+            const current = db.getSettings().botLogs;
+            let nextVal = !current;
+            if (sub === 'on' || sub === 'enable') nextVal = true;
+            if (sub === 'off' || sub === 'disable') nextVal = false;
+
+            db.updateSettings({ botLogs: nextVal });
+
+            await sock.sendMessage(jid, {
+                text: `📜 *Bot Logs & Notifications are now:* *${nextVal ? 'ENABLED' : 'DISABLED'}* (Destination: ${db.getSettings().botLogsDestination || 'self'})`
+            }, { quoted: msg });
+        }
+    },
+
     block: {
         description: 'Block a WhatsApp contact',
         run: async ({ sock, msg, jid, args, sender }) => {

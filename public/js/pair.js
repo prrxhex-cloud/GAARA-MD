@@ -1,11 +1,45 @@
 let pollTimer = null;
-const apiBaseUrl = localStorage.getItem('api_base_url') || '';
+let apiBaseUrl = localStorage.getItem('api_base_url') || '';
+
+// Parse ?api= URL query parameter for seamless Vercel frontend config
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('api')) {
+    const passedApi = urlParams.get('api').trim().replace(/\/+$/, '');
+    if (passedApi) {
+        localStorage.setItem('api_base_url', passedApi);
+        apiBaseUrl = passedApi;
+    }
+}
 
 function apiUrl(endpoint) {
     if (!apiBaseUrl) return endpoint;
     const base = apiBaseUrl.replace(/\/+$/, '');
     return `${base}${endpoint}`;
 }
+
+function promptBackendUrl() {
+    const current = localStorage.getItem('api_base_url') || '';
+    const next = prompt('Enter your WhatsApp bot backend URL (e.g. https://gaara-x-md.onrender.com or leave blank for local/same origin):', current);
+    if (next !== null) {
+        const cleaned = next.trim().replace(/\/+$/, '');
+        localStorage.setItem('api_base_url', cleaned);
+        apiBaseUrl = cleaned;
+        showToast('Backend URL updated: ' + (cleaned || 'Same origin'));
+        updateBackendDisplay();
+        setTimeout(() => window.location.reload(), 600);
+    }
+}
+
+function updateBackendDisplay() {
+    const display = document.getElementById('currentApiDisplay');
+    if (display) {
+        display.textContent = apiBaseUrl || '(Same origin / local)';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateBackendDisplay();
+});
 
 async function requestPairCode() {
     const input = document.getElementById('phoneNumberInput');
@@ -38,7 +72,7 @@ async function requestPairCode() {
             showToast(data.error || 'Failed to request pairing code', true);
         }
     } catch (err) {
-        showToast('Request error. Please check server logs.', true);
+        showToast('Request error. Verify Backend URL or server logs.', true);
     } finally {
         if (btn) {
             btn.disabled = false;

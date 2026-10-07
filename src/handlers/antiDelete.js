@@ -36,10 +36,10 @@ export async function handleRevoke(sock, msg) {
             ? (settings.statusDestination || 'self')
             : (settings.antiDeleteDestination || (settings.antiDeleteNotifySelf === false ? 'same' : 'self'));
 
-        const targetJid = resolveDestinationJid(sock, cached.remoteJid, destinationChoice);
+        const senderJid = cached.participant || cached.remoteJid;
+        const targetJid = resolveDestinationJid(sock, cached.remoteJid, destinationChoice, senderJid);
         if (!targetJid) return;
 
-        const senderJid = cached.participant || cached.remoteJid;
         const senderNum = senderJid ? senderJid.split('@')[0] : 'Unknown';
         const isGroup = cached.remoteJid.endsWith('@g.us');
         const chatName = isStatus ? 'WhatsApp Status' : isGroup ? `Group (${cached.remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`;

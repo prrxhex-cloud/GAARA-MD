@@ -12,6 +12,17 @@ function getHeaders() {
     };
 }
 
+async function safeJson(res) {
+    if (!res || !res.ok) return null;
+    const contentType = res.headers?.get('content-type') || '';
+    if (!contentType.includes('application/json')) return null;
+    try {
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Cloudflare D1 Synchronization Service.
  * Implements persistent cloud backup & restore across restarts, re-pairs, and redeploys.
@@ -30,19 +41,21 @@ export const cfSync = {
             logger.info({ phone: cleanPhone }, '[CFSync] Pulling persistent data from Cloudflare D1...');
 
             // 1. Fetch Settings
-            const settingsRes = await fetch(`${CF_WORKER_URL}/api/user/${cleanPhone}/settings`, {
-                headers: getHeaders(),
-                signal: AbortSignal.timeout(6000)
-            });
-
             let restoredSettings = null;
-            if (settingsRes.ok) {
-                const sData = await settingsRes.json();
-                if (sData.success && sData.settings) {
+            try {
+                const settingsRes = await fetch(`${CF_WORKER_URL}/api/user/${cleanPhone}/settings`, {
+                    headers: getHeaders(),
+                    signal: AbortSignal.timeout(6000)
+                });
+
+                const sData = await safeJson(settingsRes);
+                if (sData && sData.success && sData.settings) {
                     restoredSettings = sData.settings;
                     db.updateSettings(restoredSettings);
                     logger.info({ phone: cleanPhone }, '[CFSync] Successfully restored settings from Cloudflare D1');
                 }
+            } catch (sErr) {
+                logger.debug({ err: sErr.message }, '[CFSync] Settings pull skipped');
             }
 
             // 2. Fetch Schedules
@@ -51,15 +64,14 @@ export const cfSync = {
                     headers: getHeaders(),
                     signal: AbortSignal.timeout(6000)
                 });
-                if (schedRes.ok) {
-                    const scData = await schedRes.json();
-                    if (scData.success && Array.isArray(scData.schedules) && scData.schedules.length > 0) {
-                        const local = db.getSchedules();
-                        const existingIds = new Set(local.map(s => s.id));
-                        for (const item of scData.schedules) {
-                            if (!existingIds.has(item.id)) {
-                                db.addSchedule(item);
-                            }
+
+                const scData = await safeJson(schedRes);
+                if (scData && scData.success && Array.isArray(scData.schedules) && scData.schedules.length > 0) {
+                    const local = db.getSchedules();
+                    const existingIds = new Set(local.map(s => s.id));
+                    for (const item of scData.schedules) {
+                        if (!existingIds.has(item.id)) {
+                            db.addSchedule(item);
                         }
                     }
                 }
@@ -73,15 +85,14 @@ export const cfSync = {
                     headers: getHeaders(),
                     signal: AbortSignal.timeout(6000)
                 });
-                if (repliesRes.ok) {
-                    const rData = await repliesRes.json();
-                    if (rData.success && Array.isArray(rData.replies) && rData.replies.length > 0) {
-                        const localReplies = db.getReplies();
-                        const existingTriggers = new Set(localReplies.map(r => r.trigger.toLowerCase()));
-                        for (const rep of rData.replies) {
-                            if (!existingTriggers.has(rep.trigger.toLowerCase())) {
-                                db.addReply(rep.trigger, rep.response, rep.matchType || 'contains');
-                            }
+
+                const rData = await safeJson(repliesRes);
+                if (rData && rData.success && Array.isArray(rData.replies) && rData.replies.length > 0) {
+                    const localReplies = db.getReplies();
+                    const existingTriggers = new Set(localReplies.map(r => r.trigger.toLowerCase()));
+                    for (const rep of rData.replies) {
+                        if (!existingTriggers.has(rep.trigger.toLowerCase())) {
+                            db.addReply(rep.trigger, rep.response, rep.matchType || 'contains');
                         }
                     }
                 }
@@ -100,8 +111,9 @@ export const cfSync = {
      * Pushes current local state (settings, schedules, replies) to Cloudflare D1.
      */
     async syncToCloudflare(phoneNumber) {
-        if (!phoneNumber) return { success: false, reason: 'No phone number provided' };
-        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        const rawPhone = phoneNumber || db.getSettings().ownerNumber || config.ownerNumber;
+        if (!rawPhone) return { success: false, reason: 'No phone number provided' };
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
         if (!cleanPhone) return { success: false, reason: 'Invalid phone' };
 
         try {
@@ -118,8 +130,9 @@ export const cfSync = {
     },
 
     async saveSettingsToCloudflare(phoneNumber, settings) {
-        if (!phoneNumber) return false;
-        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        const rawPhone = phoneNumber || db.getSettings().ownerNumber || config.ownerNumber;
+        if (!rawPhone) return false;
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
         try {
             const res = await fetch(`${CF_WORKER_URL}/api/user/${cleanPhone}/settings`, {
                 method: 'POST',
@@ -135,8 +148,9 @@ export const cfSync = {
     },
 
     async saveSchedulesToCloudflare(phoneNumber, schedules) {
-        if (!phoneNumber) return false;
-        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        const rawPhone = phoneNumber || db.getSettings().ownerNumber || config.ownerNumber;
+        if (!rawPhone) return false;
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
         try {
             const res = await fetch(`${CF_WORKER_URL}/api/user/${cleanPhone}/schedules`, {
                 method: 'POST',
@@ -152,8 +166,9 @@ export const cfSync = {
     },
 
     async saveRepliesToCloudflare(phoneNumber, replies) {
-        if (!phoneNumber) return false;
-        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        const rawPhone = phoneNumber || db.getSettings().ownerNumber || config.ownerNumber;
+        if (!rawPhone) return false;
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
         try {
             const res = await fetch(`${CF_WORKER_URL}/api/user/${cleanPhone}/replies`, {
                 method: 'POST',
@@ -174,11 +189,8 @@ export const cfSync = {
                 headers: getHeaders(),
                 signal: AbortSignal.timeout(5000)
             });
-            if (res.ok) {
-                const data = await res.json();
-                return data.secrets || [];
-            }
-            return [];
+            const data = await safeJson(res);
+            return data?.secrets || [];
         } catch (err) {
             logger.debug({ err: err.message }, '[CFSync] Fetch secrets from D1 skipped');
             return [];

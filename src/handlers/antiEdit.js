@@ -14,33 +14,38 @@ export async function handleEdit(sock, msg) {
         const protocolMsg = msg.message?.protocolMessage;
         if (!protocolMsg || protocolMsg.type !== 14) return; // 14 = MESSAGE_EDIT
 
-        const settings = db.getSettings();
-        if (!settings.antiEdit) return;
-
         const targetKey = protocolMsg.key;
         if (!targetKey || !targetKey.id) return;
 
         // Skip bot's own edits
         if (targetKey.fromMe) return;
 
+        const settings = db.getSettings();
         const cached = getCachedMessage(targetKey.id);
+        const remoteJid = targetKey.remoteJid || cached?.remoteJid || msg.key.remoteJid;
+        const isStatus = remoteJid === 'status@broadcast';
+
+        if (isStatus && !settings.statusAntiDelete && !settings.antiEdit) return;
+        if (!isStatus && !settings.antiEdit) return;
+
         const originalText = cached ? extractText(cached.raw || { message: cached.message }) : '(Not found in cache)';
         const editedText = extractText({ message: protocolMsg.editedMessage }) || '(No text content)';
 
-        const senderJid = cached?.participant || targetKey.participant || cached?.remoteJid || targetKey.remoteJid || msg.key.participant || msg.key.remoteJid;
+        const senderJid = cached?.participant || targetKey.participant || (isStatus ? null : cached?.remoteJid) || (isStatus ? null : targetKey.remoteJid) || msg.key.participant || msg.key.remoteJid;
         const senderNum = senderJid ? senderJid.split('@')[0] : 'Unknown';
-        const remoteJid = targetKey.remoteJid || cached?.remoteJid || msg.key.remoteJid;
         const isGroup = remoteJid && remoteJid.endsWith('@g.us');
-        const chatName = isGroup ? `Group (${remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`;
+        const chatName = isStatus ? 'WhatsApp Status' : (isGroup ? `Group (${remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`);
         const origTime = cached?.timestamp ? new Date(cached.timestamp * 1000).toLocaleTimeString() : 'Unknown';
         const editTime = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
 
         // Destination resolution ('self' vs 'same')
-        const destinationChoice = settings.antiEditDestination || 'self';
-        const targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice);
+        const destinationChoice = isStatus
+            ? (settings.statusDestination || settings.antiEditDestination || 'self')
+            : (settings.antiEditDestination || 'self');
+        const targetJid = resolveDestinationJid(sock, remoteJid, destinationChoice, senderJid);
         if (!targetJid) return;
 
-        logger.info({ id: targetKey.id, sender: senderNum, destination: destinationChoice }, '[AntiEdit] Message edit detected and recovered');
+        logger.info({ id: targetKey.id, sender: senderNum, isStatus, destination: destinationChoice }, '[AntiEdit] Message edit detected and recovered');
 
         const noticeText = formatFramedMessage([
             {
@@ -65,7 +70,7 @@ export async function handleEdit(sock, msg) {
 
         await sock.sendMessage(targetJid, {
             text: noticeText,
-            mentions: [senderJid]
+            mentions: senderJid ? [senderJid] : []
         });
 
         // Update the cached entry with edited content
@@ -73,6 +78,17 @@ export async function handleEdit(sock, msg) {
             cached.message = protocolMsg.editedMessage;
             if (cached.raw) cached.raw.message = protocolMsg.editedMessage;
             messageCache.set(targetKey.id, cached);
+        } else {
+            messageCache.set(targetKey.id, {
+                id: targetKey.id,
+                key: targetKey,
+                remoteJid,
+                participant: senderJid,
+                pushName: 'User',
+                timestamp: msg.messageTimestamp || Math.floor(Date.now() / 1000),
+                message: protocolMsg.editedMessage,
+                raw: { key: targetKey, message: protocolMsg.editedMessage }
+            });
         }
     } catch (err) {
         logger.error({ err: err.message }, '[AntiEdit] Error handling edited message');

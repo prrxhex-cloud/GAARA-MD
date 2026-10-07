@@ -16,6 +16,7 @@
             <a href="/pair">📲 Link Device</a>
             <a href="/settings" class="active">⚙️ Settings</a>
             <a href="/status">📊 Status</a>
+            <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" title="Configure Backend API URL for Vercel">🌐 Server URL</button>
         </nav>
     </header>
 
@@ -568,6 +569,11 @@
 
             <div class="input-group">
                 <input type="password" id="panelPasswordInput" placeholder="Enter Panel Password" style="text-align: center; font-size: 1.1rem;">
+            </div>
+
+            <div class="input-group" style="margin-top: 1.2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem; text-align: left;">
+                <label class="input-label" style="font-size: 0.8rem; color: var(--text-secondary);">🌐 Backend Bot API URL (Required if hosted on Vercel):</label>
+                <input type="text" id="loginApiBaseUrlInput" placeholder="e.g. https://gaara-x-md.onrender.com or leave blank" style="font-size: 0.9rem;">
             </div>
 
             <button class="btn" onclick="handleLogin()" style="width: 100%;">

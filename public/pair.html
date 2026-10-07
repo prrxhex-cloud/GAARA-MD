@@ -78,6 +78,7 @@
             <a href="/pair" class="active">📲 Link Device</a>
             <a href="/settings">⚙️ Settings</a>
             <a href="/status">📊 Status</a>
+            <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" title="Configure Backend API URL for Vercel">🌐 Server URL</button>
         </nav>
     </header>
 
@@ -136,6 +137,12 @@
                 <p style="color: var(--warning); font-size: 0.85rem; margin-top: 1rem;">
                     ⏳ Code expires in 60 seconds. Waiting for connection...
                 </p>
+            </div>
+
+            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.85rem; color: var(--text-secondary);">
+                <span>🌐 Backend Server: </span>
+                <span id="currentApiDisplay" style="color: var(--neon-cyan); font-family: monospace;">(Same origin / default)</span>
+                <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; margin-left: 0.5rem;">Change</button>
             </div>
         </div>
     </main>
