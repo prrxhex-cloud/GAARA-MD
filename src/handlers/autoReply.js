@@ -11,7 +11,9 @@ export function sleep(ms) {
 }
 
 export function getRandomJitter(min = config.humanJitterMinMs, max = config.humanJitterMaxMs) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    return Math.floor(Math.random() * (hi - lo + 1)) + lo;
 }
 
 /**

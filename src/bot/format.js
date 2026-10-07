@@ -107,6 +107,22 @@ export function resolveDestinationJid(sock, remoteJid, destinationPreference = '
 export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboardUrl) {
     const settings = db.getSettings();
     const botName = settings.botName || 'GAARA X MD';
+    const mode = (settings.mode || 'public').toUpperCase();
+    const antiDeleteStatus = settings.antiDelete ? `ENABLED (${settings.antiDeleteDestination || 'self'})` : 'DISABLED';
+    const antiEditStatus = settings.antiEdit ? `ENABLED (${settings.antiEditDestination || 'self'})` : 'DISABLED';
+    const viewOnceStatus = settings.viewOnceSaver ? `ENABLED (${settings.viewOnceDestination || 'self'})` : 'DISABLED';
+    const autoStatusStatus = settings.autoStatus ? 'ENABLED' : 'DISABLED';
+
+    // Normalize dashboard URL to avoid hardcoded or duplicate /settings
+    let settingsLink = '/settings';
+    if (dashboardUrl && typeof dashboardUrl === 'string') {
+        const cleanDash = dashboardUrl.trim().replace(/\/+$/, '');
+        if (cleanDash.endsWith('/settings')) {
+            settingsLink = cleanDash;
+        } else {
+            settingsLink = `${cleanDash}/settings`;
+        }
+    }
 
     return formatFramedMessage([
         {
@@ -115,8 +131,13 @@ export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboar
             content: [
                 `🎉 *Connected Successfully!*`,
                 `📱 *Phone:* +${phoneNumber}`,
+                `🌐 *Mode:* ${mode}`,
+                `🛡️ *Anti-Delete:* ${antiDeleteStatus}`,
+                `✏️ *Anti-Edit:* ${antiEditStatus}`,
+                `📷 *View-Once:* ${viewOnceStatus}`,
+                `💖 *Auto-Status:* ${autoStatusStatus}`,
                 `🔑 *Panel Password:* ${panelPassword}`,
-                `🌐 *Dashboard:* ${dashboardUrl}/settings`,
+                `🌐 *Dashboard:* ${settingsLink}`,
                 ``,
                 `💡 *Next Steps:*`,
                 `1. Click the button below to copy your panel password.`,

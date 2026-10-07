@@ -16,14 +16,16 @@ export const aiCommands = {
             const settings = db.getSettings();
             const apiKey = settings.sasaDevApiKey || config.sasaDevApiKey;
 
-            await sock.sendMessage(jid, { text: '🤔 Thinking...' }, { quoted: msg });
+            if (sock?.presence) {
+                sock.presence('composing', jid).catch(() => {});
+            }
 
             let answer = '';
 
             if (apiKey) {
                 try {
                     const url = `https://sasa-dev-api.xyz/api/sasaaiplus/chat?apikey=${encodeURIComponent(apiKey)}&text=${encodeURIComponent(prompt)}`;
-                    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+                    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
                     const data = await res.json();
 
                     if (data && data.status && data.result) {
@@ -59,6 +61,9 @@ export const aiCommands = {
             ]);
 
             await sock.sendMessage(jid, { text }, { quoted: msg });
+            if (sock?.presence) {
+                sock.presence('paused', jid).catch(() => {});
+            }
         }
     }
 };

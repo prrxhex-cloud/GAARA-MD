@@ -8,7 +8,7 @@ import { handleEdit } from '../src/handlers/antiEdit.js';
 import { handleRevoke } from '../src/handlers/antiDelete.js';
 import cfSync from '../src/services/cfSync.js';
 import worker from '../worker/index.js';
-import { getBotStatus } from '../src/bot/socket.js';
+import { getBotStatus, resetSession, clearSessionFiles } from '../src/bot/socket.js';
 import { handleIncomingMessage } from '../src/bot/handler.js';
 import { allCommandCategories, commandMap, getCommand } from '../src/commands/index.js';
 import { createServer } from '../src/server/app.js';
@@ -737,3 +737,97 @@ describe('6. Anti-Edit, Configurable Destinations & Multi-Cloud Tests', () => {
         assert.equal(db.getSettings().botLogsDestination, 'same');
     });
 });
+
+describe('7. Re-Pairing Resilience, Consolidated Welcome & Performance Tests', () => {
+    test('formatConnectedSetupMessage consolidates mode and all active features into single card', () => {
+        db.updateSettings({
+            mode: 'public',
+            antiDelete: true,
+            antiDeleteDestination: 'self',
+            antiEdit: true,
+            antiEditDestination: 'same',
+            viewOnceSaver: true,
+            autoStatus: false
+        });
+
+        const setupText = formatConnectedSetupMessage('94771909806', 'testPass123', 'https://gaara-md.vercel.app');
+        assert.ok(setupText.includes('GAARA X MD SETUP'));
+        assert.ok(setupText.includes('+94771909806'));
+        assert.ok(setupText.includes('*Mode:* PUBLIC'));
+        assert.ok(setupText.includes('Anti-Delete:* ENABLED (self)'));
+        assert.ok(setupText.includes('Anti-Edit:* ENABLED (same)'));
+        assert.ok(setupText.includes('View-Once:* ENABLED (self)'));
+        assert.ok(setupText.includes('Auto-Status:* DISABLED'));
+        assert.ok(setupText.includes('testPass123'));
+        assert.ok(setupText.includes('https://gaara-md.vercel.app/settings'));
+        assert.ok(!setupText.includes('http://localhost:3000/settings'));
+    });
+
+    test('formatConnectedSetupMessage normalizes URL with existing /settings suffix', () => {
+        const setupText = formatConnectedSetupMessage('94771909806', 'pass', 'https://gaara-md.vercel.app/settings');
+        assert.ok(setupText.includes('https://gaara-md.vercel.app/settings'));
+        assert.ok(!setupText.includes('/settings/settings'));
+    });
+
+    test('resetSession resets socket state to unlinked and cleans session files safely', async () => {
+        const resetRes = await resetSession({ clearFiles: true });
+        assert.equal(resetRes, true);
+
+        const status = getBotStatus();
+        assert.equal(status.connection, 'unlinked');
+        assert.equal(status.isLinked, false);
+        assert.equal(status.pairingCode, null);
+        assert.equal(status.telemetry.phoneNumber, null);
+        assert.equal(status.telemetry.connectedAt, null);
+    });
+
+    test('Express server exposes /api/pair/reset and /api/disconnect endpoints', async () => {
+        const app = createServer();
+        const server = app.listen(0);
+        const port = server.address().port;
+
+        try {
+            // 1. Reset endpoint
+            const resetRes = await fetch(`http://localhost:${port}/api/pair/reset`, { method: 'POST' });
+            assert.equal(resetRes.status, 200);
+            const resetData = await resetRes.json();
+            assert.equal(resetData.success, true);
+
+            // 2. Disconnect endpoint
+            const discRes = await fetch(`http://localhost:${port}/api/disconnect`, { method: 'POST' });
+            assert.equal(discRes.status, 200);
+            const discData = await discRes.json();
+            assert.equal(discData.success, true);
+
+            // 3. Pair endpoint validation
+            const pairMissing = await fetch(`http://localhost:${port}/api/pair`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            assert.equal(pairMissing.status, 400);
+            const pairData = await pairMissing.json();
+            assert.ok(pairData.error.includes('Phone number is required'));
+        } finally {
+            server.close();
+        }
+    });
+
+    test('System alive command displays fast / snappy anti-ban status', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const aliveCmd = getCommand('alive');
+        assert.ok(aliveCmd);
+        await aliveCmd.run({ sock: mockSock, msg: { key: { remoteJid: 'test@s.whatsapp.net' } }, jid: 'test@s.whatsapp.net' });
+        assert.equal(mockSock.sentMessages.length, 1);
+        const text = mockSock.sentMessages[0].content.text;
+        assert.ok(text.includes('Fast Engine / Snappy'));
+    });
+});
+

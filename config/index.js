@@ -50,8 +50,8 @@ export const config = {
     sessionDir,
 
     // Anti-Ban Safeguards
-    humanJitterMinMs: parseInt(process.env.HUMAN_JITTER_MIN_MS || '1200', 10),
-    humanJitterMaxMs: parseInt(process.env.HUMAN_JITTER_MAX_MS || '2800', 10),
+    humanJitterMinMs: parseInt(process.env.HUMAN_JITTER_MIN_MS || '100', 10),
+    humanJitterMaxMs: parseInt(process.env.HUMAN_JITTER_MAX_MS || '250', 10),
     memoryGuardMb: parseInt(process.env.MEMORY_GUARD_MB || '200', 10),
     lowMemoryMode: process.env.LOW_MEMORY_MODE !== 'false',
     alwaysOn: process.env.ALWAYS_ON !== 'false',

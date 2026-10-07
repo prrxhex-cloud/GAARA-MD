@@ -35,7 +35,7 @@ export const systemCommands = {
                         `⏱️ *Uptime:* ${uptime}`,
                         `🧠 *Memory:* ${mem} MB`,
                         `🌐 *Mode:* ${settings.mode.toUpperCase()}`,
-                        `🛡️ *Anti-Ban:* Active (Jitter 1.2s - 2.8s)`,
+                        `🛡️ *Anti-Ban:* Active (Fast Engine / Snappy)`,
                         `📌 *Prefix:* ${settings.prefix}`,
                         ``,
                         `Type *${settings.prefix}menu* to see all commands.`

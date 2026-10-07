@@ -156,9 +156,11 @@ export async function handleIncomingMessage(sock, msg) {
 
                 logger.info({ cmd: cmdName, sender: sender.split('@')[0], isGroup: isGroupChat, mode }, '[Command] Executing');
 
-                // Anti-Ban Safeguard: Humanized Response Jitter (1.2s - 2.8s)
-                const delay = getRandomJitter();
-                await sleep(delay);
+                // Snappy response dispatch with minimal anti-flood guard (0 - 80ms)
+                const delay = Math.min(getRandomJitter(30, 80), 80);
+                if (delay > 0) {
+                    await sleep(delay);
+                }
 
                 try {
                     await cmd.run({ sock, msg, jid: remoteJid, args, sender, text: args.join(' ') });

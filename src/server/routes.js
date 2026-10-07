@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import config from '../../config/index.js';
 import db from '../../config/database.js';
-import { getBotStatus, requestPairing, initBotSocket } from '../bot/socket.js';
+import { getBotStatus, requestPairing, initBotSocket, resetSession } from '../bot/socket.js';
 import { createSessionToken, isValidSession, requireAuth } from './auth.js';
 import cfSync from '../services/cfSync.js';
 import logger from '../utils/logger.js';
@@ -60,17 +60,49 @@ export function setupRoutes(app) {
     });
 
     app.post('/api/pair', async (req, res) => {
-        const { phone } = req.body;
+        const { phone, frontendUrl } = req.body;
         if (!phone) {
             return res.status(400).json({ error: 'Phone number is required' });
         }
 
+        let discoveredFrontend = frontendUrl;
+        if (!discoveredFrontend && req.headers.origin) {
+            discoveredFrontend = req.headers.origin;
+        } else if (!discoveredFrontend && req.headers.referer) {
+            try {
+                discoveredFrontend = new URL(req.headers.referer).origin;
+            } catch {}
+        }
+
         try {
-            const code = await requestPairing(phone);
+            const code = await requestPairing(phone, { frontendUrl: discoveredFrontend });
             res.json({ success: true, code });
         } catch (err) {
             logger.error({ err: err.message }, '[API] Pairing request error');
-            res.status(500).json({ error: err.message || 'Failed to request pairing code' });
+            const statusCode = (err.message && err.message.includes('timed out')) ? 504 : 500;
+            res.status(statusCode).json({ error: err.message || 'Failed to request pairing code' });
+        }
+    });
+
+    app.post('/api/pair/reset', async (req, res) => {
+        try {
+            logger.info('[API] Explicit pairing session reset requested');
+            await resetSession({ clearFiles: true });
+            res.json({ success: true, message: 'Session reset successfully' });
+        } catch (err) {
+            logger.error({ err: err.message }, '[API] Failed to reset session');
+            res.status(500).json({ error: err.message || 'Failed to reset session' });
+        }
+    });
+
+    app.post('/api/disconnect', async (req, res) => {
+        try {
+            logger.info('[API] Bot disconnect requested');
+            await resetSession({ clearFiles: true });
+            res.json({ success: true, message: 'Bot disconnected successfully' });
+        } catch (err) {
+            logger.error({ err: err.message }, '[API] Failed to disconnect bot');
+            res.status(500).json({ error: err.message || 'Failed to disconnect bot' });
         }
     });
 

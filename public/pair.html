@@ -120,9 +120,14 @@
                 <input type="text" id="phoneNumberInput" placeholder="e.g. 94771234567 or 15551234567" style="font-size: 1.1rem; text-align: center;">
             </div>
 
-            <button class="btn" id="getPairBtn" onclick="requestPairCode()" style="font-size: 1.05rem; padding: 0.9rem 2rem;">
-                ⚡ GET PAIRING CODE
-            </button>
+            <div style="display: flex; gap: 0.75rem; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <button class="btn" id="getPairBtn" onclick="requestPairCode()" style="font-size: 1.05rem; padding: 0.9rem 2rem;">
+                    ⚡ GET PAIRING CODE
+                </button>
+                <button class="btn btn-secondary" id="resetSessionBtn" onclick="resetPairingSession()" style="font-size: 0.9rem; padding: 0.9rem 1.2rem;" title="Clear stale session credentials if reconnecting or stuck">
+                    🔄 Reset Session
+                </button>
+            </div>
 
             <div id="codeResultContainer" style="display: none; margin-top: 2rem;">
                 <p style="color: var(--text-secondary); font-size: 0.95rem;">Enter this code on your WhatsApp phone:</p>
