@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAARA X MD — Link WhatsApp</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .pair-card {
+            max-width: 650px;
+            margin: 2rem auto;
+            text-align: center;
+        }
+        .code-box {
+            background: rgba(10, 2, 6, 0.9);
+            border: 2px dashed var(--neon-red);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin: 1.5rem 0;
+            display: inline-block;
+            box-shadow: 0 0 25px rgba(255, 42, 95, 0.3);
+        }
+        .code-text {
+            font-size: 2.4rem;
+            letter-spacing: 6px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 12px var(--neon-red);
+            font-family: monospace;
+        }
+        .steps-container {
+            text-align: left;
+            margin: 2rem 0;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+        }
+        .step-item:last-child {
+            margin-bottom: 0;
+        }
+        .step-num {
+            background: var(--neon-red);
+            color: #fff;
+            font-weight: 800;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 0.9rem;
+        }
+        .step-text strong {
+            color: #fff;
+        }
+        .step-text p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.2rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <div class="logo-badge">⚡ GAARA</div>
+            <div class="brand-title">GAARA X MD PANEL</div>
+        </div>
+        <nav>
+            <a href="/pair" class="active">📲 Link Device</a>
+            <a href="/settings">⚙️ Settings</a>
+            <a href="/status">📊 Status</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="card pair-card">
+            <h1 class="card-title" style="font-size: 1.8rem; justify-content: center;">
+                📲 Link Your WhatsApp Account
+            </h1>
+            <p class="card-desc">
+                Fast, secure pairing using WhatsApp official 8-digit Pairing Code. No QR scanner needed.
+            </p>
+
+            <div class="steps-container">
+                <div class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-text">
+                        <strong>Open WhatsApp on your Phone</strong>
+                        <p>Go to Settings ➔ Linked Devices ➔ Link a Device.</p>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-text">
+                        <strong>Choose Phone Number Linking</strong>
+                        <p>Tap "Link with phone number instead" at the bottom of the QR scanner.</p>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-text">
+                        <strong>Enter the Code</strong>
+                        <p>Generate your code below, enter it into WhatsApp, and confirm linking.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group" style="text-align: left; max-width: 420px; margin: 0 auto 1.5rem auto;">
+                <label class="input-label">WhatsApp Phone Number (with Country Code):</label>
+                <input type="text" id="phoneNumberInput" placeholder="e.g. 94771234567 or 15551234567" style="font-size: 1.1rem; text-align: center;">
+            </div>
+
+            <button class="btn" id="getPairBtn" onclick="requestPairCode()" style="font-size: 1.05rem; padding: 0.9rem 2rem;">
+                ⚡ GET PAIRING CODE
+            </button>
+
+            <div id="codeResultContainer" style="display: none; margin-top: 2rem;">
+                <p style="color: var(--text-secondary); font-size: 0.95rem;">Enter this code on your WhatsApp phone:</p>
+                <div class="code-box">
+                    <div class="code-text" id="codeValue">----</div>
+                </div>
+                <div>
+                    <button class="btn btn-secondary" onclick="copyPairingCode()">
+                        📋 COPY PAIRING CODE
+                    </button>
+                </div>
+                <p style="color: var(--warning); font-size: 0.85rem; margin-top: 1rem;">
+                    ⏳ Code expires in 60 seconds. Waiting for connection...
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast"></div>
+
+    <footer>
+        GAARA X MD &bull; Built by GAARA DEV OFC &bull; Pure ESM
+    </footer>
+
+    <script src="/js/pair.js"></script>
+</body>
+</html>

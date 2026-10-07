@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment Variables & Secrets
+.env
+*.env.local
+
+# WhatsApp Session Auth Creds (NEVER COMMIT)
+session/*
+!session/.gitkeep
+void-auth/
+*.session
+
+# Runtime Data
+data/*.json
+!data/.gitkeep
+
+# Runtime Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp*
+temp/
+
+# OS metadata
+.DS_Store
+Thumbs.db
