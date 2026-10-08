@@ -1,5 +1,5 @@
 import db from '../../config/database.js';
-import { formatFramedMessage } from '../bot/format.js';
+import { formatFramedMessage, getBotAdReplyContext, getBotIconBuffer } from '../bot/format.js';
 import { formatUptime } from './system.js';
 import { commandMap } from './index.js';
 
@@ -215,6 +215,9 @@ export const navigationCommands = {
 
             const text = formatFramedMessage(sections);
 
+            const botIcon = getBotIconBuffer();
+            const adReply = getBotAdReplyContext();
+
             // Try sending with quick action buttons
             if (sock.sendButton) {
                 try {
@@ -225,7 +228,9 @@ export const navigationCommands = {
                             { text: '⚡ PING', id: `${p}ping` },
                             { text: '🌸 ALIVE', id: `${p}alive` },
                             { text: '👑 OWNER', id: `${p}owner` }
-                        ]
+                        ],
+                        ...(botIcon ? { image: botIcon } : {}),
+                        contextInfo: adReply
                     });
                     return;
                 } catch {
@@ -233,7 +238,7 @@ export const navigationCommands = {
                 }
             }
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: adReply }, { quoted: msg });
         }
     },
 
@@ -259,7 +264,7 @@ export const navigationCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     }
 };

@@ -1,6 +1,8 @@
 import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { extractText } from '../utils/antiBug.js';
+import { getBotAdReplyContext } from '../bot/format.js';
+import { chatSasaAiPlus } from '../services/sasaApi.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -95,23 +97,10 @@ export async function handleAutoReply(sock, msg) {
 
         let aiAnswer = '';
 
-        if (apiKey) {
-            try {
-                const prompt = `[Owner Context: You are ${botName}, personal assistant for ${ownerName} (${ownerBio}). Reply directly and politely on WhatsApp to: "${text}"]`;
-                const url = `https://sasa-dev-api.xyz/api/sasaaiplus/chat?apikey=${encodeURIComponent(apiKey)}&text=${encodeURIComponent(prompt)}`;
-                
-                const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.status && data.result) {
-                        aiAnswer = data.result;
-                    } else if (data && data.reply) {
-                        aiAnswer = data.reply;
-                    }
-                }
-            } catch (apiErr) {
-                logger.warn({ err: apiErr.message }, '[AutoReply] Sasa AI request failed, using local assistant');
-            }
+        const prompt = `[Owner Context: You are ${botName}, personal assistant for ${ownerName} (${ownerBio}). Reply directly and politely on WhatsApp to: "${text}"]`;
+        const res = await chatSasaAiPlus(prompt, { timeoutMs: 10000 });
+        if (res.success && res.reply) {
+            aiAnswer = res.reply;
         }
 
         // Smart Fallback if API key missing or external service unavailable
@@ -144,7 +133,7 @@ async function simulateTypingAndSend(sock, jid, text, quoted) {
             await sleep(delay);
         }
 
-        await sock.sendMessage(jid, { text }, { quoted });
+        await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted });
 
         if (sock.sendPresenceUpdate) {
             sock.sendPresenceUpdate('paused', jid).catch(() => {});

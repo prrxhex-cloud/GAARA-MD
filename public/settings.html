@@ -121,6 +121,15 @@
                             <option value="same">Same Chat (Where received)</option>
                         </select>
                     </div>
+
+                    <div class="input-group" style="margin-top: 0.8rem;">
+                        <label class="input-label">Trigger Unlock Mode:</label>
+                        <select id="viewOnceTriggerModeSelect">
+                            <option value="both">Both (Command &amp; Emoji)</option>
+                            <option value="command">Command Only (.vv, .readviewonce)</option>
+                            <option value="emoji">Emoji Reply Only (🔓, 👁️)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Auto-Status & Status Anti-Delete Card -->
@@ -252,8 +261,9 @@
                     </div>
 
                     <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Sasa Dev API Key:</label>
-                        <input type="text" id="sasaApiKeyInput" placeholder="Enter SASA_DEV_API_KEY from .env">
+                        <label class="input-label">Sasa Dev API Key (Permanent / Secured):</label>
+                        <input type="password" id="sasaApiKeyInput" placeholder="Server-side permanent key active" disabled style="opacity: 0.75; cursor: not-allowed; letter-spacing: 0.15em;">
+                        <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 0.3rem;">🔒 Permanent key securely managed on server backend.</small>
                     </div>
                 </div>
             </div>

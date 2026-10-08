@@ -1,7 +1,7 @@
 import { makeVoidExtrasSocket } from '@sasa-dev/void-baileys';
 import db from '../../config/database.js';
 import cfSync from '../services/cfSync.js';
-import { formatFramedMessage } from './format.js';
+import { formatFramedMessage, getBotAdReplyContext, getBotIconBuffer } from './format.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
 import { isOwner } from '../commands/owner.js';
 import logger from '../utils/logger.js';
@@ -20,6 +20,17 @@ export const SETTINGS_BUTTONS = [
     { id: 'cfg_edit_same', text: '✏️ Edit: Same' },
     { id: 'cfg_viewonce_self', text: '🔓 ViewOnce: Self' },
     { id: 'cfg_viewonce_same', text: '🔓 ViewOnce: Same' }
+];
+
+export const TRIGGER_SETTINGS_BUTTONS = [
+    { id: 'cfg_votrigger_both', text: '⚡ Trigger: Both' },
+    { id: 'cfg_votrigger_command', text: '💬 Trigger: Command (.vv)' },
+    { id: 'cfg_votrigger_emoji', text: '🔓 Trigger: Emoji (🔓, 👁️)' }
+];
+
+export const ALL_SETTINGS_BUTTONS = [
+    ...SETTINGS_BUTTONS,
+    ...TRIGGER_SETTINGS_BUTTONS
 ];
 
 /**
@@ -59,7 +70,10 @@ export async function sendTemplateButtons(sock, jid, { text, title, footer, temp
  * 3. Native Flow Buttons helper (makeVoidExtrasSocket(sock).sendButton)
  */
 export async function sendNativeFlowButtons(sock, jid, { text, footer, buttons = [], image, video, quoted = null } = {}) {
-    const socket = typeof sock.sendButton === 'function' ? sock : makeVoidExtrasSocket(sock);
+    let socket = sock;
+    if (typeof sock.sendButton !== 'function' && (sock?.ev || sock?.ws)) {
+        try { socket = makeVoidExtrasSocket(sock); } catch {}
+    }
     if (typeof socket.sendButton === 'function') {
         return await socket.sendButton(jid, {
             text,
@@ -76,7 +90,10 @@ export async function sendNativeFlowButtons(sock, jid, { text, footer, buttons =
  * 4. Classic Buttons helper (makeVoidExtrasSocket(sock).sendButton with style: 'classic')
  */
 export async function sendClassicButtons(sock, jid, { text, footer, buttons = [], quoted = null } = {}) {
-    const socket = typeof sock.sendButton === 'function' ? sock : makeVoidExtrasSocket(sock);
+    let socket = sock;
+    if (typeof sock.sendButton !== 'function' && (sock?.ev || sock?.ws)) {
+        try { socket = makeVoidExtrasSocket(sock); } catch {}
+    }
     if (typeof socket.sendButton === 'function') {
         return await socket.sendButton(jid, {
             text,
@@ -105,6 +122,7 @@ export function formatSettingsMenuText() {
                 `🛡️ *Anti-Delete Dest:* *${(settings.antiDeleteDestination || 'self').toUpperCase()}*`,
                 `✏️ *Anti-Edit Dest:* *${(settings.antiEditDestination || 'self').toUpperCase()}*`,
                 `🔓 *View-Once Dest:* *${(settings.viewOnceDestination || 'self').toUpperCase()}*`,
+                `⚡ *View-Once Trigger:* *${(settings.viewOnceTriggerMode || 'both').toUpperCase()}*`,
                 `💖 *Auto-Status:* *${settings.autoStatus ? 'ENABLED' : 'DISABLED'}*`,
                 `📜 *Bot Logs:* *${settings.botLogs ? 'ENABLED' : 'DISABLED'} (${(settings.botLogsDestination || 'self').toUpperCase()})*`,
                 ``,
@@ -120,17 +138,23 @@ export function formatSettingsMenuText() {
 /**
  * Sends the interactive settings card with native buttons using void-baileys.
  */
-export async function sendSettingsButtons(sock, jid, quotedMsg = null) {
+export async function sendSettingsButtons(sock, jid, quotedMsg = null, subCategory = null) {
     const settings = db.getSettings();
     const text = formatSettingsMenuText();
-    const socket = typeof sock.sendButton === 'function' ? sock : makeVoidExtrasSocket(sock);
+    let socket = sock;
+    if (typeof socket.sendButton !== 'function' && (sock?.ev || sock?.ws)) {
+        try { socket = makeVoidExtrasSocket(sock); } catch {}
+    }
+    const activeButtons = (subCategory === 'triggers' || subCategory === 'trigger') ? TRIGGER_SETTINGS_BUTTONS : SETTINGS_BUTTONS;
+    const botIcon = getBotIconBuffer();
 
     try {
         if (typeof socket.sendButton === 'function') {
             return await socket.sendButton(jid, {
                 text,
                 footer: settings.footerText || BOT_FOOTER,
-                buttons: SETTINGS_BUTTONS
+                buttons: activeButtons,
+                ...(botIcon ? { image: botIcon } : {})
             });
         }
     } catch (err) {
@@ -142,15 +166,19 @@ export async function sendSettingsButtons(sock, jid, quotedMsg = null) {
         return await sock.sendMessage(jid, {
             text,
             footer: settings.footerText || BOT_FOOTER,
-            buttons: SETTINGS_BUTTONS.slice(0, 3).map(b => ({
+            buttons: activeButtons.slice(0, 3).map(b => ({
                 buttonId: b.id,
                 buttonText: { displayText: b.text },
                 type: 1
-            }))
+            })),
+            contextInfo: getBotAdReplyContext()
         }, quotedMsg ? { quoted: quotedMsg } : {});
     } catch (fbErr) {
         logger.warn({ err: fbErr.message }, '[Buttons] Falling back to text-only settings menu');
-        return await sock.sendMessage(jid, { text }, quotedMsg ? { quoted: quotedMsg } : {});
+        return await sock.sendMessage(jid, {
+            text,
+            contextInfo: getBotAdReplyContext()
+        }, quotedMsg ? { quoted: quotedMsg } : {});
     }
 }
 
@@ -300,6 +328,17 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
         settingUpdates = { viewOnceSaver: true, viewOnceDestination: 'same' };
         label = 'View-Once Destination set to SAME CHAT (Current chat)';
     }
+    // View-Once Trigger Mode mappings
+    else if (cleanId === 'cfg_votrigger_both' || cleanId === 'votrigger_both' || cleanText.includes('trigger: both') || cleanText === 'trigger both') {
+        settingUpdates = { viewOnceTriggerMode: 'both' };
+        label = 'View-Once Trigger Mode set to BOTH (Emoji & Command)';
+    } else if (cleanId === 'cfg_votrigger_command' || cleanId === 'votrigger_command' || cleanText.includes('trigger: command') || cleanText === 'trigger command') {
+        settingUpdates = { viewOnceTriggerMode: 'command' };
+        label = 'View-Once Trigger Mode set to COMMAND ONLY (.vv / .readviewonce)';
+    } else if (cleanId === 'cfg_votrigger_emoji' || cleanId === 'votrigger_emoji' || cleanText.includes('trigger: emoji') || cleanText === 'trigger emoji') {
+        settingUpdates = { viewOnceTriggerMode: 'emoji' };
+        label = 'View-Once Trigger Mode set to EMOJI ONLY (🔓, 👁️)';
+    }
 
     if (!settingUpdates) {
         return false;
@@ -311,7 +350,8 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
     // Verify Owner authorization
     if (!isOwner(msg, sender)) {
         await sock.sendMessage(remoteJid, {
-            text: '🔒 Only the bot owner can configure settings.'
+            text: '🔒 Only the bot owner can configure settings.',
+            contextInfo: getBotAdReplyContext()
         }, { quoted: msg });
         return true;
     }
@@ -339,6 +379,7 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
                 `🛡️ *Anti-Delete:* *${updated.antiDelete ? 'ENABLED' : 'DISABLED'} (${updated.antiDeleteDestination || 'self'})*`,
                 `✏️ *Anti-Edit:* *${updated.antiEdit ? 'ENABLED' : 'DISABLED'} (${updated.antiEditDestination || 'self'})*`,
                 `🔓 *View-Once:* *${updated.viewOnceSaver ? 'ENABLED' : 'DISABLED'} (${updated.viewOnceDestination || 'self'})*`,
+                `⚡ *View-Once Trigger:* *${(updated.viewOnceTriggerMode || 'both').toUpperCase()}*`,
                 `💖 *Auto-Status:* *${updated.autoStatus ? 'ENABLED' : 'DISABLED'}*`,
                 `📜 *Bot Logs:* *${updated.botLogs ? 'ENABLED' : 'DISABLED'} (${updated.botLogsDestination || 'self'})*`
             ]
@@ -348,6 +389,9 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
         footer: updated.footerText || BOT_FOOTER
     });
 
-    await sock.sendMessage(remoteJid, { text: confirmNotice }, { quoted: msg });
+    await sock.sendMessage(remoteJid, {
+        text: confirmNotice,
+        contextInfo: getBotAdReplyContext()
+    }, { quoted: msg });
     return true;
 }

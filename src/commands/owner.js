@@ -29,9 +29,9 @@ export const ownerCommands = {
     settings: {
         description: 'Open interactive WhatsApp settings menu with buttons',
         aliases: ['config', 'cfg', 'botsettings'],
-        run: async ({ sock, msg, jid, sender }) => {
+        run: async ({ sock, msg, jid, sender, args }) => {
             if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
-            await sendSettingsButtons(sock, jid, msg);
+            await sendSettingsButtons(sock, jid, msg, args?.[0]);
         }
     },
 

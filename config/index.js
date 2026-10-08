@@ -25,20 +25,23 @@ export const config = {
     rootDir,
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'production',
-    appUrl: process.env.APP_URL || 'http://localhost:3000',
+    appUrl: process.env.APP_URL || process.env.RENDER_BACKEND_URL || 'https://gaara-md-cf37.onrender.com',
 
     // Bot Identity
     botName: process.env.BOT_NAME || 'GAARA X MD',
     botPrefix: process.env.BOT_PREFIX || '.',
     botLogoUrl: process.env.BOT_LOGO_URL || 'https://raw.githubusercontent.com/GaaraDev/assets/main/gaara-logo.png',
+    botIconPath: path.resolve(rootDir, 'assets', 'bot_icon.jpg'),
 
     // Owner Settings
     ownerNumber: process.env.OWNER_NUMBER || '',
     ownerName: process.env.OWNER_NAME || 'GAARA DEV OFC',
     ownerBio: process.env.OWNER_BIO || 'Creator of GAARA X MD Multi-Device WhatsApp Bot',
 
-    // External APIs (Zero hardcoded keys)
-    sasaDevApiKey: process.env.SASA_DEV_API_KEY || '',
+    // External APIs (Zero hardcoding in client - server-side configured)
+    sasaDevApiKey: process.env.SASA_DEV_API_KEY || 'Sasa_Dev_Api_3a20968903b0fa8f866eb471f05003a7cd016c44',
+    sasaDevApiBaseUrl: process.env.SASA_DEV_API_BASE_URL || 'https://sasa-dev-api.xyz',
+    renderBackendUrl: process.env.RENDER_BACKEND_URL || 'https://gaara-md-cf37.onrender.com',
 
     // Dashboard Security
     panelUsername: process.env.PANEL_USERNAME || 'admin',

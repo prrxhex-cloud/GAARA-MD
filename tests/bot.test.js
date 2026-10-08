@@ -25,6 +25,10 @@ import {
     extractButtonPayload,
     handleSettingsButtonAction
 } from '../src/bot/buttons.js';
+import { normalizeCommandTrigger } from '../src/bot/handler.js';
+import { getSasaDevApiKey, chatSasaAiPlus, PERMANENT_SASA_KEY } from '../src/services/sasaApi.js';
+import { uptimeMs, checkMemoryGuard, makeLowRamCache, sendPollVoting } from '../src/bot/extras.js';
+import { TRIGGER_SETTINGS_BUTTONS, ALL_SETTINGS_BUTTONS } from '../src/bot/buttons.js';
 
 describe('1. Database & Security Tests', () => {
     test('Settings initialize and persist properly', () => {
@@ -1144,9 +1148,9 @@ describe('8. Interactive WhatsApp Buttons Settings & Advanced Recovery Tests', (
         assert.ok(mediaMsg.content.caption.includes('View-Once Recovered'));
         assert.ok(mediaMsg.content.caption.includes('Secret view-once photo'));
 
-        // Confirmation notice sent in group
-        const groupNotice = mockSock.sentMessages.find(m => m.jid === groupJid && m.content.text?.includes('Self Chat'));
-        assert.ok(groupNotice, 'Confirmation notice should be sent to current chat');
+        // Stealth Mode (Picture 4): Origin chat remains 100% silent (0 status/progress messages)
+        const originChatMessages = mockSock.sentMessages.filter(m => m.jid === groupJid);
+        assert.equal(originChatMessages.length, 0, 'Origin chat must remain 100% silent in stealth mode');
     });
 
     test('View-Once .readviewonce / .vv routes media to same chat when viewOnceDestination is same', async () => {
@@ -1511,6 +1515,152 @@ describe('8. Interactive WhatsApp Buttons Settings & Advanced Recovery Tests', (
 
         await handleIncomingMessage(mockSock, pizzaOrderMsg);
         assert.ok(mockSock.sentMessages.some(m => m.content.text?.includes('Order Placed!')));
+    });
+});
+
+describe('9. Void Baileys Native Power, SASA DEV API & Trigger Normalization Tests', () => {
+    test('normalizeCommandTrigger correctly strips emojis and outer brackets from tapped button texts', () => {
+        const test1 = normalizeCommandTrigger('🌸 ALIVE', '.');
+        assert.ok(test1);
+        assert.equal(test1.cmdName, 'alive');
+
+        const test2 = normalizeCommandTrigger('⚡ PING', '.');
+        assert.ok(test2);
+        assert.equal(test2.cmdName, 'ping');
+
+        const test3 = normalizeCommandTrigger('👑 OWNER', '.');
+        assert.ok(test3);
+        assert.equal(test3.cmdName, 'owner');
+
+        const test4 = normalizeCommandTrigger('. 🌸 alive', '.');
+        assert.ok(test4);
+        assert.equal(test4.cmdName, 'alive');
+
+        const test5 = normalizeCommandTrigger('[ 🌸 ALIVE ]', '.');
+        assert.ok(test5);
+        assert.equal(test5.cmdName, 'alive');
+    });
+
+    test('Incoming message with emoji button text executes normalized command directly', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const msg = {
+            key: { id: 'msg-btn-norm', remoteJid: '94770000000@s.whatsapp.net', fromMe: false },
+            message: {
+                conversation: '🌸 ALIVE'
+            }
+        };
+
+        await handleIncomingMessage(mockSock, msg);
+        assert.ok(mockSock.sentMessages.length > 0, 'Command should have responded');
+        const replyText = mockSock.sentMessages[0].content.text;
+        assert.ok(replyText.includes('STATUS ALIVE') || replyText.includes('OPERATIONAL'));
+    });
+
+    test('View-Once unlock via reply with emoji (🔓, 👁️) extracts and routes media', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMedia: async () => Buffer.from('unlocked-emoji-image'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({
+            viewOnceSaver: true,
+            viewOnceDestination: 'self',
+            viewOnceTriggerMode: 'both',
+            ownerNumber: '94770000000'
+        });
+
+        const emojiUnlockMsg = {
+            key: { id: 'emoji-trigger-msg', remoteJid: '888888-group@g.us', participant: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '🔓',
+                    contextInfo: {
+                        quotedMessage: {
+                            viewOnceMessage: {
+                                message: {
+                                    imageMessage: {
+                                        caption: 'Secret emoji view-once image'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, emojiUnlockMsg);
+
+        // Media delivered to self chat
+        const mediaMsg = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(mediaMsg, 'Unlocked media should be delivered to self chat');
+        assert.equal(mediaMsg.jid, '94770000000@s.whatsapp.net');
+        assert.ok(mediaMsg.content.caption.includes('Secret emoji view-once image'));
+
+        // Origin chat remains 100% silent in stealth mode
+        const groupMsgs = mockSock.sentMessages.filter(m => m.jid === '888888-group@g.us');
+        assert.equal(groupMsgs.length, 0, 'Origin chat must remain 100% silent in stealth mode');
+    });
+
+    test('TRIGGER_SETTINGS_BUTTONS and ALL_SETTINGS_BUTTONS are properly defined', () => {
+        assert.equal(TRIGGER_SETTINGS_BUTTONS.length, 3);
+        assert.equal(ALL_SETTINGS_BUTTONS.length, 13);
+        assert.ok(TRIGGER_SETTINGS_BUTTONS.some(b => b.id === 'cfg_votrigger_both'));
+        assert.ok(TRIGGER_SETTINGS_BUTTONS.some(b => b.id === 'cfg_votrigger_command'));
+        assert.ok(TRIGGER_SETTINGS_BUTTONS.some(b => b.id === 'cfg_votrigger_emoji'));
+    });
+
+    test('SASA DEV API service provides valid permanent credentials and safe error handling', async () => {
+        const apiKey = getSasaDevApiKey();
+        assert.equal(apiKey, PERMANENT_SASA_KEY);
+
+        const emptyRes = await chatSasaAiPlus('');
+        assert.equal(emptyRes.success, false);
+        assert.ok(emptyRes.error);
+    });
+
+    test('Void Baileys extras module utilities operate smoothly', () => {
+        const uptime = uptimeMs();
+        assert.equal(typeof uptime, 'number');
+        assert.ok(uptime >= 0);
+
+        const memCheck = checkMemoryGuard(500);
+        assert.equal(typeof memCheck.exceeded, 'boolean');
+        assert.equal(memCheck.limitMb, 500);
+
+        const cache = makeLowRamCache(10, 1000);
+        cache.set('foo', 'bar');
+        assert.equal(cache.get('foo'), 'bar');
+        cache.del('foo');
+        assert.equal(cache.get('foo'), undefined);
+        cache.close?.();
+    });
+
+    test('sendPollVoting helper delivers poll stanza to target jid', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-poll' } };
+            }
+        };
+
+        await sendPollVoting(mockSock, '12345@s.whatsapp.net', 'Rate GAARA X MD', ['🔥 5 Stars', '👍 4 Stars', '👌 3 Stars']);
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].content.poll.name, 'Rate GAARA X MD');
+        assert.equal(mockSock.sentMessages[0].content.poll.values.length, 3);
     });
 });
 

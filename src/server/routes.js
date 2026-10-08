@@ -145,18 +145,31 @@ export function setupRoutes(app) {
     // Protected Settings API
     // ==========================================
     app.get('/api/settings', requireAuth, (req, res) => {
-        res.json(db.getSettings());
+        const raw = db.getSettings();
+        const settings = { ...raw };
+        if (settings.sasaDevApiKey) {
+            settings.sasaDevApiKey = '••••••••••••••••••••••••••••••••••••••••••••';
+        }
+        res.json(settings);
     });
 
     app.post('/api/settings', requireAuth, (req, res) => {
         try {
-            const updated = db.updateSettings(req.body);
+            const body = { ...req.body };
+            if (body.sasaDevApiKey && (body.sasaDevApiKey.includes('••••') || body.sasaDevApiKey.trim() === '')) {
+                delete body.sasaDevApiKey;
+            }
+            const updated = db.updateSettings(body);
             const status = getBotStatus();
             const phone = status.telemetry?.phoneNumber;
             if (phone) {
                 cfSync.saveSettingsToCloudflare(phone, updated).catch(() => {});
             }
-            res.json({ success: true, settings: updated });
+            const safeUpdated = { ...updated };
+            if (safeUpdated.sasaDevApiKey) {
+                safeUpdated.sasaDevApiKey = '••••••••••••••••••••••••••••••••••••••••••••';
+            }
+            res.json({ success: true, settings: safeUpdated });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

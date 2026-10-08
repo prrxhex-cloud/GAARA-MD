@@ -1,6 +1,6 @@
 import os from 'os';
 import db from '../../config/database.js';
-import { formatFramedMessage } from '../bot/format.js';
+import { formatFramedMessage, getBotAdReplyContext } from '../bot/format.js';
 import { commandMap } from './index.js';
 
 export function formatUptime(seconds) {
@@ -43,7 +43,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -69,7 +69,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -84,7 +84,7 @@ export const systemCommands = {
                     content: [`🕒 Active Duration: *${up}*`]
                 }
             ]);
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -108,7 +108,7 @@ export const systemCommands = {
                     ]
                 }
             ]);
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -126,7 +126,7 @@ export const systemCommands = {
                     ]
                 }
             ]);
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -149,7 +149,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -178,7 +178,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -204,7 +204,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     },
 
@@ -226,7 +226,7 @@ export const systemCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
         }
     }
 };

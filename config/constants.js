@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
     // Anti View-Once (photos, videos, audio)
     viewOnceSaver: true,
     viewOnceDestination: 'self', // 'self' | 'same'
+    viewOnceTriggerMode: 'both', // 'both' | 'command' | 'emoji'
 
     // Status Anti-Delete & Auto-Status
     autoStatus: true,

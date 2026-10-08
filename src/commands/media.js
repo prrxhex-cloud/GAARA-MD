@@ -7,7 +7,8 @@ import {
     stickerToImage,
     toMp3
 } from '../utils/media.js';
-import { formatFramedMessage, resolveDestinationJid } from '../bot/format.js';
+import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext } from '../bot/format.js';
+import { BOT_FOOTER } from '../../config/constants.js';
 import db from '../../config/database.js';
 import logger from '../utils/logger.js';
 
@@ -187,11 +188,29 @@ export const mediaCommands = {
             const viewOnceContent = curr;
 
             const settings = db.getSettings();
+            const triggerMode = settings.viewOnceTriggerMode || 'both';
             const destinationChoice = settings.viewOnceDestination || 'self';
             const targetJid = resolveDestinationJid(sock, jid, destinationChoice) || jid;
+            const isStealth = destinationChoice === 'self' || targetJid !== jid;
+
+            if (triggerMode === 'emoji') {
+                if (!isStealth) {
+                    return sock.sendMessage(jid, {
+                        text: '⚠️ View-Once trigger mode is set to EMOJI ONLY. Please reply with an emoji (e.g. 🔓 or 👁️).',
+                        contextInfo: getBotAdReplyContext()
+                    }, { quoted: msg });
+                }
+                return; // 100% silent in stealth mode
+            }
 
             try {
-                await sock.sendMessage(jid, { text: '🔓 Unlocking View-Once media...' }, { quoted: msg });
+                // If NOT in stealth mode (i.e. same chat delivery), send unlocking status progress
+                if (!isStealth) {
+                    await sock.sendMessage(jid, {
+                        text: '🔓 Unlocking View-Once media...',
+                        contextInfo: getBotAdReplyContext()
+                    }, { quoted: msg });
+                }
 
                 const mediaContainer = { message: viewOnceContent };
                 const buffer = sock.downloadMedia
@@ -201,9 +220,10 @@ export const mediaCommands = {
                 if (!buffer) throw new Error('Could not download media stream');
 
                 const senderNum = (msg.key.participant || msg.key.remoteJid).split('@')[0];
+                const footer = settings.footerText || BOT_FOOTER;
                 const captionText = `🔓 *View-Once Recovered*\n` +
                     (targetJid !== jid ? `👤 *Requester:* @${senderNum}\n` : '') +
-                    `${viewOnceContent.imageMessage?.caption || viewOnceContent.videoMessage?.caption || ''}`;
+                    `${viewOnceContent.imageMessage?.caption || viewOnceContent.videoMessage?.caption || ''}\n\n${footer}`;
 
                 if (viewOnceContent.imageMessage) {
                     await sock.sendMessage(targetJid, {
@@ -225,11 +245,23 @@ export const mediaCommands = {
                     });
                 }
 
-                if (targetJid !== jid) {
-                    await sock.sendMessage(jid, { text: '✅ View-Once media successfully unlocked and sent to your Self Chat!' }, { quoted: msg });
+                // Origin chat remains 100% silent when viewOnceDestination is self
+                // Only send confirmation if explicitly in same-chat non-stealth mode
+                if (!isStealth && targetJid !== jid) {
+                    await sock.sendMessage(jid, {
+                        text: '✅ View-Once media successfully unlocked and sent to your Self Chat!',
+                        contextInfo: getBotAdReplyContext()
+                    }, { quoted: msg });
                 }
             } catch (err) {
-                await sock.sendMessage(jid, { text: `❌ Failed to extract view-once media: ${err.message}` }, { quoted: msg });
+                if (!isStealth) {
+                    await sock.sendMessage(jid, {
+                        text: `❌ Failed to extract view-once media: ${err.message}`,
+                        contextInfo: getBotAdReplyContext()
+                    }, { quoted: msg });
+                } else {
+                    logger.warn({ err: err.message }, '[ViewOnce] Stealth extraction error');
+                }
             }
         }
     },

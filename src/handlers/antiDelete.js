@@ -1,7 +1,7 @@
 import db from '../../config/database.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
-import { getCachedMessage } from '../bot/cache.js';
-import { formatFramedMessage, resolveDestinationJid } from '../bot/format.js';
+import { getCachedMessage, unwrapMessage } from '../bot/cache.js';
+import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext } from '../bot/format.js';
 import { extractText } from '../utils/antiBug.js';
 import logger from '../utils/logger.js';
 
@@ -60,8 +60,8 @@ export async function handleRevoke(sock, msg) {
         const chatName = isStatus ? 'WhatsApp Status' : isGroup ? `Group (${cached.remoteJid.split('@')[0]})` : `Private Chat (+${senderNum})`;
         const sentTime = cached.timestamp ? new Date(cached.timestamp * 1000).toLocaleTimeString() : 'Unknown';
 
-        const textContent = extractText(cached.raw);
-        const inner = cached.message || {};
+        const textContent = extractText(cached.raw || { message: cached.message });
+        const inner = unwrapMessage(cached.message || cached.raw) || {};
 
         let mediaType = null;
         if (inner.imageMessage) mediaType = 'image';
@@ -92,7 +92,8 @@ export async function handleRevoke(sock, msg) {
         // Send text recovery notice
         await sock.sendMessage(targetJid, {
             text: noticeText,
-            mentions: [senderJid]
+            mentions: [senderJid],
+            contextInfo: getBotAdReplyContext()
         });
 
         // If it was a media message, attempt downloading and forwarding media

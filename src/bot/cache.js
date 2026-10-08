@@ -16,12 +16,69 @@ export const rateLimitCache = new NodeCache({
 });
 
 /**
+ * Recursively unwraps nested message containers (deviceSentMessage, ephemeralMessage,
+ * documentWithCaptionMessage, viewOnceMessage, viewOnceMessageV2, viewOnceMessageV2Extension).
+ */
+export function unwrapMessage(msgOrContent) {
+    if (!msgOrContent) return null;
+    let curr = msgOrContent.message || msgOrContent;
+    while (curr) {
+        if (curr.ephemeralMessage?.message) {
+            curr = curr.ephemeralMessage.message;
+        } else if (curr.deviceSentMessage?.message) {
+            curr = curr.deviceSentMessage.message;
+        } else if (curr.documentWithCaptionMessage?.message) {
+            curr = curr.documentWithCaptionMessage.message;
+        } else if (curr.viewOnceMessage?.message) {
+            curr = curr.viewOnceMessage.message;
+        } else if (curr.viewOnceMessageV2?.message) {
+            curr = curr.viewOnceMessageV2.message;
+        } else if (curr.viewOnceMessageV2Extension?.message) {
+            curr = curr.viewOnceMessageV2Extension.message;
+        } else {
+            break;
+        }
+    }
+    return curr;
+}
+
+/**
  * Stores a message into LRU cache for anti-delete and view-once recovery.
+ * Guarantees that an existing valid message payload is NEVER overwritten by
+ * an empty revoke stanza (protocolMessage.type === 0).
  */
 export function cacheMessage(msg) {
     if (!msg || !msg.key || !msg.key.id) return;
     try {
         const id = msg.key.id;
+        const unwrapped = unwrapMessage(msg);
+
+        // Check if the incoming message is a revoke stanza (protocolMessage.type === 0)
+        const isRevokeStanza = unwrapped?.protocolMessage?.type === 0;
+        if (isRevokeStanza) {
+            // NEVER overwrite or store empty revoke stanzas into message cache
+            return;
+        }
+
+        // Check if we already have an existing cached entry
+        const existing = messageCache.get(id);
+        if (existing) {
+            const existingUnwrapped = unwrapMessage(existing.message || existing.raw);
+            const hasExistingContent = existingUnwrapped && (
+                existingUnwrapped.conversation ||
+                existingUnwrapped.extendedTextMessage?.text ||
+                existingUnwrapped.imageMessage ||
+                existingUnwrapped.videoMessage ||
+                existingUnwrapped.audioMessage ||
+                existingUnwrapped.documentMessage
+            );
+
+            // If existing entry has valid text or media, and incoming message is empty or a protocol message, preserve existing
+            if (hasExistingContent && (!unwrapped || unwrapped.protocolMessage)) {
+                return;
+            }
+        }
+
         const entry = {
             id,
             key: msg.key,
@@ -59,3 +116,12 @@ export function checkRateLimit(jid, maxPerMinute = 20) {
     rateLimitCache.set(key, count + 1);
     return true;
 }
+
+export default {
+    messageCache,
+    rateLimitCache,
+    unwrapMessage,
+    cacheMessage,
+    getCachedMessage,
+    checkRateLimit
+};

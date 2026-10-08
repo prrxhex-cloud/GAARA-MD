@@ -1,22 +1,50 @@
-import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
+import fs from 'fs';
+import path from 'path';
+import { SUPPORT_HEADER, BOT_FOOTER, DEFAULT_CHANNEL_URL } from '../../config/constants.js';
 import db from '../../config/database.js';
 import config from '../../config/index.js';
 
+let cachedBotIconBuffer = null;
+
+/**
+ * Loads the permanent bot icon buffer from assets/bot_icon.jpg
+ */
+export function getBotIconBuffer() {
+    if (cachedBotIconBuffer) return cachedBotIconBuffer;
+    const iconPath = path.resolve(config.rootDir, 'assets', 'bot_icon.jpg');
+    if (fs.existsSync(iconPath)) {
+        try {
+            cachedBotIconBuffer = fs.readFileSync(iconPath);
+            return cachedBotIconBuffer;
+        } catch {}
+    }
+    return null;
+}
+
+/**
+ * Creates WhatsApp External Ad Reply context embedding the bot icon and footer.
+ */
+export function getBotAdReplyContext(options = {}) {
+    const settings = db.getSettings();
+    const botName = options.botName || settings.botName || 'GAARA X MD';
+    const footer = options.footer || settings.footerText || BOT_FOOTER;
+    const channelUrl = settings.channelUrl || DEFAULT_CHANNEL_URL;
+    const thumbnail = getBotIconBuffer();
+
+    return {
+        externalAdReply: {
+            title: botName,
+            body: footer,
+            mediaType: 1,
+            thumbnail: thumbnail || undefined,
+            sourceUrl: channelUrl,
+            renderLargerThumbnail: true
+        }
+    };
+}
+
 /**
  * Creates an ASCII Framing Box exactly matching the user's specification.
- * 
- * ╭───[ ⚡ {BOT_NAME} ]
- * │◇│
- * │◇│ ─────────────────
- * ╰────────────────────
- * 
- * ╭───[ {EMOJI} {SECTION_TITLE} ]
- * │◇│
- * │◇│  {CONTENT_LINES}
- * │◇│
- * ╰────────────────────
- * 
- * THIS BOT BUILT BY GAARA DEV OFC.
  */
 export function formatFramedMessage(sections = [], options = {}) {
     const settings = db.getSettings();
@@ -38,7 +66,6 @@ export function formatFramedMessage(sections = [], options = {}) {
         if (sec.emoji && !titleString.includes(sec.emoji)) {
             titleString = `${sec.emoji} ${titleString}`;
         }
-        // Normalize brackets if caller passed '[ 🛡️ ANTI DELETE ]'
         titleString = titleString.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
 
         const rawContent = Array.isArray(sec.content) ? sec.content : [sec.content];
@@ -112,6 +139,7 @@ export function resolveDestinationJid(sock, remoteJid, destinationPreference = '
 
 /**
  * Creates the Connected Setup Message sent to 'Message Yourself' upon pairing.
+ * Matches user Picture 1 gentle Sinhala greeting and compact photo branding.
  */
 export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboardUrl) {
     const settings = db.getSettings();
@@ -133,7 +161,17 @@ export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboar
         }
     }
 
-    return formatFramedMessage([
+    const gentleNotice = [
+        `│ බොට් සම්බන්ධ වෙමින් පවතී... 🔄`,
+        ``,
+        `කරුණාකර මිනිත්තු 5ක් රැඳී සිටින්න... ⏳`,
+        `• ඉන්පසු .alive විධානය භාවිතා කරන්න`,
+        ``,
+        `මිනිත්තු 5කට පසු කිසිදු ප්‍රතිචාරයක් නොලැබේ නම් පමණක්:`,
+        `• කරුණාකර ඔබේ උපාංගය නැවත සම්බන්ධ කරන්න ( RE-LINK DEVICE ) 🔄`
+    ].join('\n');
+
+    const setupCard = formatFramedMessage([
         {
             emoji: '🌸',
             title: `${botName} SETUP`,
@@ -155,4 +193,14 @@ export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboar
             ]
         }
     ]);
+
+    return `${gentleNotice}\n\n${setupCard}`;
 }
+
+export default {
+    getBotIconBuffer,
+    getBotAdReplyContext,
+    formatFramedMessage,
+    resolveDestinationJid,
+    formatConnectedSetupMessage
+};

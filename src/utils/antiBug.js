@@ -61,6 +61,8 @@ export function extractText(msg) {
             m = m.viewOnceMessageV2.message;
         } else if (m.viewOnceMessageV2Extension?.message) {
             m = m.viewOnceMessageV2Extension.message;
+        } else if (m.deviceSentMessage?.message) {
+            m = m.deviceSentMessage.message;
         } else if (m.documentWithCaptionMessage?.message) {
             m = m.documentWithCaptionMessage.message;
         } else {

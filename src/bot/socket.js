@@ -17,7 +17,7 @@ import { handleRevoke } from '../handlers/antiDelete.js';
 import { handleEdit } from '../handlers/antiEdit.js';
 import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
-import { formatConnectedSetupMessage } from './format.js';
+import { formatConnectedSetupMessage, getBotIconBuffer, getBotAdReplyContext } from './format.js';
 import { dispatchBotLog } from './loggerNotifier.js';
 import { messageCache } from './cache.js';
 
@@ -162,10 +162,10 @@ export async function initBotSocket() {
             logger: baileysLogger,
             printQRInTerminal: false,
             browser: Browsers.windows('Desktop'),
-            lowMemoryMode: config.lowMemoryMode,
-            alwaysOn: config.alwaysOn,
-            alwaysOnline: config.alwaysOnline,
-            memoryGuardMb: config.memoryGuardMb,
+            lowMemoryMode: config.lowMemoryMode ?? true,
+            alwaysOn: config.alwaysOn ?? true,
+            alwaysOnline: config.alwaysOnline ?? true,
+            memoryGuardMb: config.memoryGuardMb ?? 200,
             syncFullHistory: false,
             generateHighQualityLinkPreview: true,
             markOnlineOnConnect: true,
@@ -412,6 +412,8 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
 
         const setupText = formatConnectedSetupMessage(phoneNumber, panelPass, dashboardUrl);
         const channelUrl = settings.channelUrl || 'https://whatsapp.com/channel/gaaraxmd';
+        const iconBuffer = getBotIconBuffer();
+        const adReply = getBotAdReplyContext({ title: `${settings.botName || 'GAARA X MD'} SETUP` });
 
         if (sock.sendButton) {
             try {
@@ -421,7 +423,9 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
                     buttons: [
                         { text: '📋 COPY PASSWORD', copy: panelPass },
                         { text: 'View channel', url: channelUrl }
-                    ]
+                    ],
+                    ...(iconBuffer ? { image: iconBuffer } : {}),
+                    contextInfo: adReply
                 });
                 lastSetupSentPhone = phoneNumber;
                 return;
@@ -430,7 +434,10 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
             }
         }
 
-        await sock.sendMessage(selfJid, { text: setupText });
+        await sock.sendMessage(selfJid, {
+            text: setupText,
+            contextInfo: adReply
+        });
         lastSetupSentPhone = phoneNumber;
     } catch (err) {
         logger.error({ err: err.message }, '[Bot] Error sending initial setup message');

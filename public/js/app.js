@@ -172,6 +172,7 @@ async function loadSettings() {
 
         setCheck('viewOnceSaverToggle', s.viewOnceSaver !== false);
         setVal('viewOnceDestSelect', s.viewOnceDestination || 'self');
+        setVal('viewOnceTriggerModeSelect', s.viewOnceTriggerMode || 'both');
 
         setCheck('autoStatusToggle', s.autoStatus !== false);
         setVal('autoStatusEmoji', s.autoStatusEmoji || '💖');
@@ -187,7 +188,7 @@ async function loadSettings() {
 
         setCheck('autoReplyToggle', s.autoReply);
         setCheck('aiAutoReplyToggle', s.aiAutoReply);
-        setVal('sasaApiKeyInput', s.sasaDevApiKey || '');
+        setVal('sasaApiKeyInput', s.sasaDevApiKey ? '••••••••••••••••••••••••••••••••••••••••••••' : '');
 
         // 05 Identity & Profile
         setVal('botNameInput', s.botName);
@@ -215,6 +216,7 @@ async function saveAutomationSettings() {
 
         viewOnceSaver: getCheck('viewOnceSaverToggle'),
         viewOnceDestination: getVal('viewOnceDestSelect'),
+        viewOnceTriggerMode: getVal('viewOnceTriggerModeSelect') || 'both',
 
         autoStatus: getCheck('autoStatusToggle'),
         autoStatusEmoji: getVal('autoStatusEmoji'),
@@ -229,9 +231,13 @@ async function saveAutomationSettings() {
         antiCallTemplate: getVal('antiCallTemplate'),
 
         autoReply: getCheck('autoReplyToggle'),
-        aiAutoReply: getCheck('aiAutoReplyToggle'),
-        sasaDevApiKey: getVal('sasaApiKeyInput')
+        aiAutoReply: getCheck('aiAutoReplyToggle')
     };
+
+    const apiKeyVal = getVal('sasaApiKeyInput');
+    if (apiKeyVal && !apiKeyVal.includes('•••')) {
+        payload.sasaDevApiKey = apiKeyVal;
+    }
 
     try {
         const res = await fetch(apiUrl('/api/settings'), {

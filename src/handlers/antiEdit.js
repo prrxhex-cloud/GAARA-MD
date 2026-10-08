@@ -1,7 +1,7 @@
 import db from '../../config/database.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
-import { getCachedMessage, messageCache } from '../bot/cache.js';
-import { formatFramedMessage, resolveDestinationJid } from '../bot/format.js';
+import { getCachedMessage, messageCache, unwrapMessage } from '../bot/cache.js';
+import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext } from '../bot/format.js';
 import { extractText } from '../utils/antiBug.js';
 import logger from '../utils/logger.js';
 
@@ -28,12 +28,7 @@ export async function handleEdit(sock, msg) {
         }
 
         // Unpack nested or ephemeral wrappers inside editedMessage
-        while (editedMessage?.message) {
-            editedMessage = editedMessage.message;
-        }
-        if (editedMessage?.ephemeralMessage?.message) {
-            editedMessage = editedMessage.ephemeralMessage.message;
-        }
+        editedMessage = unwrapMessage(editedMessage);
 
         if (!targetKey || !targetKey.id) return;
 
@@ -95,7 +90,8 @@ export async function handleEdit(sock, msg) {
 
         await sock.sendMessage(targetJid, {
             text: noticeText,
-            mentions: senderJid ? [senderJid] : []
+            mentions: senderJid ? [senderJid] : [],
+            contextInfo: getBotAdReplyContext()
         });
 
         // Update the cached entry with edited content

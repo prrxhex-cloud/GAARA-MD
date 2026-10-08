@@ -1,6 +1,7 @@
 import db from '../../config/database.js';
 import config from '../../config/index.js';
-import { formatFramedMessage } from '../bot/format.js';
+import { formatFramedMessage, getBotAdReplyContext } from '../bot/format.js';
+import { chatSasaAiPlus } from '../services/sasaApi.js';
 import logger from '../utils/logger.js';
 
 export const aiCommands = {
@@ -9,12 +10,13 @@ export const aiCommands = {
         aliases: ['ask', 'chat'],
         run: async ({ sock, msg, jid, args }) => {
             if (!args || args.length === 0) {
-                return sock.sendMessage(jid, { text: '⚠️ Please provide a question or prompt. Example: *.ai What is Quantum Computing?*' }, { quoted: msg });
+                return sock.sendMessage(jid, {
+                    text: '⚠️ Please provide a question or prompt. Example: *.ai What is Quantum Computing?*',
+                    contextInfo: getBotAdReplyContext()
+                }, { quoted: msg });
             }
 
             const prompt = args.join(' ');
-            const settings = db.getSettings();
-            const apiKey = settings.sasaDevApiKey || config.sasaDevApiKey;
 
             if (sock?.sendPresenceUpdate) {
                 sock.sendPresenceUpdate('composing', jid).catch(() => {});
@@ -24,23 +26,12 @@ export const aiCommands = {
 
             let answer = '';
 
-            if (apiKey) {
-                try {
-                    const url = `https://sasa-dev-api.xyz/api/sasaaiplus/chat?apikey=${encodeURIComponent(apiKey)}&text=${encodeURIComponent(prompt)}`;
-                    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-                    const data = await res.json();
-
-                    if (data && data.status && data.result) {
-                        answer = data.result;
-                    } else if (data && data.reply) {
-                        answer = data.reply;
-                    } else if (data && data.error) {
-                        logger.warn({ error: data.error }, '[AI] Sasa API returned error');
-                        answer = `⚠️ Sasa AI API Notice: ${data.error}\nPlease check your API key in the web dashboard (/settings).`;
-                    }
-                } catch (apiErr) {
-                    logger.error({ err: apiErr.message }, '[AI] Request error');
-                }
+            const res = await chatSasaAiPlus(prompt, { timeoutMs: 12000 });
+            if (res.success && res.reply) {
+                answer = res.reply;
+            } else if (res.error) {
+                logger.warn({ error: res.error }, '[AI] Sasa API returned error');
+                answer = `⚠️ Sasa AI API Notice: ${res.error}\nPlease check your API key in the web dashboard (/settings).`;
             }
 
             if (!answer) {
@@ -62,7 +53,7 @@ export const aiCommands = {
                 }
             ]);
 
-            await sock.sendMessage(jid, { text }, { quoted: msg });
+            await sock.sendMessage(jid, { text, contextInfo: getBotAdReplyContext() }, { quoted: msg });
             if (sock?.sendPresenceUpdate) {
                 sock.sendPresenceUpdate('paused', jid).catch(() => {});
             } else if (sock?.presence) {
