@@ -57,8 +57,9 @@ export async function chatSasaAiPlus(prompt, { timeoutMs = 12000 } = {}) {
 
         return { success: true, reply, data };
     } catch (err) {
-        logger.warn({ err: err.message, prompt: prompt.slice(0, 50) }, '[SasaApi] Request failed');
-        return { success: false, reply: '', error: err.message };
+        const safeErrMsg = (err.message || 'Request failed').replace(/apikey=[^&\s]+/gi, 'apikey=[REDACTED]');
+        logger.warn({ err: safeErrMsg, prompt: prompt.slice(0, 50) }, '[SasaApi] Request failed');
+        return { success: false, reply: '', error: safeErrMsg };
     }
 }
 

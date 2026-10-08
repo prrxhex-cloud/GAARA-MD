@@ -54,13 +54,15 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const CRASH_PATTERNS = [
-    // Zero-width space flooding (> 500 contiguous zero-width chars)
-    /[\u200B-\u200D\uFEFF]{500,}/,
+    // Zero-width space flooding (> 300 contiguous zero-width chars)
+    /[\u200B-\u200D\uFEFF]{300,}/,
     // Bidirectional text override flood
     /[\u202A-\u202E]{20,}/,
+    // Combining diacritics flood (Zalgo crash text)
+    /[\u0300-\u036F\u0483-\u0489\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{100,}/,
     // Extremely deep tag nesting or known crash bugs
     /wa\.me\/settings\?v=/,
-    /\u0000{10,}/
+    /\u0000{5,}/
 ];
 
 export const MAX_MESSAGE_LENGTH = 15000;

@@ -3,6 +3,7 @@ import config from '../../config/index.js';
 import { extractText } from '../utils/antiBug.js';
 import { getBotAdReplyContext } from '../bot/format.js';
 import { chatSasaAiPlus } from '../services/sasaApi.js';
+import { isSafeRegex } from '../utils/security.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -65,10 +66,16 @@ export async function handleAutoReply(sock, msg) {
             if (r.matchType === 'exact') {
                 matched = cleanText === trigger.toLowerCase();
             } else if (r.matchType === 'regex') {
-                try {
-                    const re = new RegExp(trigger, 'i');
-                    matched = re.test(text);
-                } catch {
+                const check = isSafeRegex(trigger);
+                if (check.safe) {
+                    try {
+                        const re = new RegExp(trigger, 'i');
+                        matched = re.test(text.slice(0, 500));
+                    } catch {
+                        matched = false;
+                    }
+                } else {
+                    logger.warn({ trigger, reason: check.reason }, '[AutoReply] Skipped unsafe regex trigger');
                     matched = false;
                 }
             } else {

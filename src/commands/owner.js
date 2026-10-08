@@ -16,13 +16,18 @@ import logger from '../utils/logger.js';
 const execPromise = util.promisify(exec);
 
 export function isOwner(msg, senderJid) {
-    if (msg.key.fromMe) return true;
-    const senderNumber = senderJid ? senderJid.split('@')[0] : '';
+    if (msg?.key?.fromMe) return true;
+    const rawNum = senderJid ? senderJid.split('@')[0] : '';
+    const senderNumber = rawNum.replace(/[^0-9]/g, '');
+    if (!senderNumber) return false;
+
     const settings = db.getSettings();
-    return (
-        senderNumber === (settings.ownerNumber || '').replace(/[^0-9]/g, '') ||
-        senderNumber === (config.ownerNumber || '').replace(/[^0-9]/g, '')
-    );
+    const owner1 = (settings.ownerNumber || '').replace(/[^0-9]/g, '');
+    const owner2 = (config.ownerNumber || '').replace(/[^0-9]/g, '');
+
+    if (owner1 && senderNumber === owner1) return true;
+    if (owner2 && senderNumber === owner2) return true;
+    return false;
 }
 
 export const ownerCommands = {

@@ -1,4 +1,5 @@
 import { formatFramedMessage } from '../bot/format.js';
+import { sanitizeFilename } from '../utils/security.js';
 import logger from '../utils/logger.js';
 
 export const downloaderCommands = {
@@ -46,7 +47,7 @@ export const downloaderCommands = {
                     await sock.sendMessage(jid, {
                         audio: Buffer.from(audioBuffer),
                         mimetype: 'audio/mp4',
-                        fileName: `${title}.mp3`
+                        fileName: `${sanitizeFilename(title, 'song')}.mp3`
                     }, { quoted: msg });
                 } else {
                     const info = formatFramedMessage([

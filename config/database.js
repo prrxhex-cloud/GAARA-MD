@@ -5,6 +5,7 @@ import EventEmitter from 'events';
 import bcrypt from 'bcryptjs';
 import config from './index.js';
 import { DEFAULT_SETTINGS } from './constants.js';
+import { sanitizeObject, isSafeRegex } from '../src/utils/security.js';
 
 class JsonDatabase extends EventEmitter {
     constructor() {
@@ -118,9 +119,22 @@ class JsonDatabase extends EventEmitter {
         return settings;
     }
 
+    maskSettings(settings) {
+        if (!settings) return {};
+        const safe = { ...settings };
+        if (safe.sasaDevApiKey) {
+            safe.sasaDevApiKey = '••••••••••••••••••••••••••••••••••••••••••••';
+        }
+        delete safe.jwtSecret;
+        delete safe.panelPassword;
+        return safe;
+    }
+
     updateSettings(partial, { suppressLog = false } = {}) {
         const current = this.getSettings();
-        const { _suppressLog, _lastSetupSentPhone, ...cleanPartial } = partial;
+        // Prevent prototype pollution attacks by sanitizing keys
+        const sanitized = sanitizeObject(partial || {});
+        const { _suppressLog, _lastSetupSentPhone, ...cleanPartial } = sanitized;
         const merged = { ...current, ...cleanPartial };
         delete merged._suppressLog;
         delete merged._lastSetupSentPhone;
@@ -136,9 +150,23 @@ class JsonDatabase extends EventEmitter {
     }
 
     addReply(trigger, response, matchType = 'contains') {
+        const cleanTrigger = (trigger || '').trim();
+        const cleanResponse = (response || '').trim();
+        if (!cleanTrigger || !cleanResponse) {
+            throw new Error('Trigger and response are required');
+        }
+
+        // Validate regex to prevent ReDoS (Catastrophic Backtracking)
+        if (matchType === 'regex') {
+            const check = isSafeRegex(cleanTrigger);
+            if (!check.safe) {
+                throw new Error(`Unsafe regex pattern: ${check.reason}`);
+            }
+        }
+
         const replies = this.getReplies();
         const id = 'reply-' + Date.now();
-        const newEntry = { id, trigger: trigger.trim(), response: response.trim(), matchType, enabled: true };
+        const newEntry = { id, trigger: cleanTrigger, response: cleanResponse, matchType, enabled: true };
         replies.push(newEntry);
         this._writeSafe(this.repliesFile, replies);
         return newEntry;
@@ -217,9 +245,12 @@ class JsonDatabase extends EventEmitter {
     }
 
     verifyAdminPassword(plainPassword) {
+        if (!plainPassword || typeof plainPassword !== 'string') return false;
         const admin = this.getAdminUser();
-        if (!admin || !admin.passwordHash) return false;
-        return bcrypt.compareSync(plainPassword, admin.passwordHash);
+        // Timing attack resistance: use dummy bcrypt hash if admin does not exist
+        const targetHash = admin?.passwordHash || '$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012';
+        const isMatch = bcrypt.compareSync(plainPassword, targetHash);
+        return Boolean(admin && admin.passwordHash && isMatch);
     }
 
     updateAdminPassword(newPassword) {

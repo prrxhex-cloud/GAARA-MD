@@ -4,45 +4,202 @@ import { formatFramedMessage } from '../bot/format.js';
 import { extractText } from '../utils/antiBug.js';
 
 /**
- * Safely evaluates mathematical expressions including exponents and standard Math functions.
+ * Pure Recursive Descent Mathematical Expression Evaluator.
+ * Safely evaluates math expressions without eval() or new Function().
+ * Completely immune to JavaScript code injection, sandbox escapes, and prototype pollution.
  */
-function safeCalc(expr) {
+export function safeCalc(expr) {
     if (!expr || typeof expr !== 'string') throw new Error('Empty expression');
 
-    // Replace '^' with '**'
-    let sanitized = expr.replace(/\^/g, '**');
+    let pos = 0;
+    const str = expr.trim();
 
-    // Convert common math constants and functions
-    sanitized = sanitized
-        .replace(/\bpi\b/gi, 'Math.PI')
-        .replace(/\be\b/gi, 'Math.E')
-        .replace(/\bsqrt\b/gi, 'Math.sqrt')
-        .replace(/\bcbrt\b/gi, 'Math.cbrt')
-        .replace(/\babs\b/gi, 'Math.abs')
-        .replace(/\bsin\b/gi, 'Math.sin')
-        .replace(/\bcos\b/gi, 'Math.cos')
-        .replace(/\btan\b/gi, 'Math.tan')
-        .replace(/\blog\b/gi, 'Math.log10')
-        .replace(/\bln\b/gi, 'Math.log')
-        .replace(/\bround\b/gi, 'Math.round')
-        .replace(/\bfloor\b/gi, 'Math.floor')
-        .replace(/\bceil\b/gi, 'Math.ceil');
+    function nextToken() {
+        while (pos < str.length && /\s/.test(str[pos])) pos++;
+        if (pos >= str.length) return null;
 
-    // Validate characters: only digits, operators, parentheses, and Math functions allowed
-    if (!/^[0-9+\-*/().%^ ,]|Math\.(PI|E|sqrt|cbrt|abs|sin|cos|tan|log10|log|round|floor|ceil)+$/.test(sanitized)) {
-        // Strip out allowed tokens and check for forbidden ones
-        const stripped = sanitized.replace(/Math\.(PI|E|sqrt|cbrt|abs|sin|cos|tan|log10|log|round|floor|ceil)/g, '');
-        if (!/^[0-9+\-*/().% ,]+$/.test(stripped.replace(/\s+/g, ''))) {
-            throw new Error('Invalid math characters detected');
+        const ch = str[pos];
+
+        // Number: digits and optional decimal point
+        if (/[0-9]/.test(ch) || (ch === '.' && pos + 1 < str.length && /[0-9]/.test(str[pos + 1]))) {
+            let start = pos;
+            let hasDot = false;
+            while (pos < str.length && (/[0-9]/.test(str[pos]) || (str[pos] === '.' && !hasDot))) {
+                if (str[pos] === '.') hasDot = true;
+                pos++;
+            }
+            return { type: 'NUMBER', value: parseFloat(str.slice(start, pos)) };
         }
+
+        // Identifier: function names and constants
+        if (/[a-zA-Z_]/.test(ch)) {
+            let start = pos;
+            while (pos < str.length && /[a-zA-Z0-9_]/.test(str[pos])) {
+                pos++;
+            }
+            const ident = str.slice(start, pos).toLowerCase();
+            return { type: 'IDENT', value: ident };
+        }
+
+        // Multi-character operator: **
+        if (ch === '*' && pos + 1 < str.length && str[pos + 1] === '*') {
+            pos += 2;
+            return { type: 'OP', value: '^' };
+        }
+
+        // Single-character operators and parentheses
+        if ('+-*/%^(),'.includes(ch)) {
+            pos++;
+            return { type: ch === '(' ? 'LPAREN' : ch === ')' ? 'RPAREN' : ch === ',' ? 'COMMA' : 'OP', value: ch };
+        }
+
+        throw new Error(`Invalid math character: '${ch}'`);
     }
 
-    const fn = new Function(`"use strict"; return (${sanitized});`);
-    const res = fn();
-    if (typeof res !== 'number' || !isFinite(res)) {
+    const tokens = [];
+    let tok;
+    while ((tok = nextToken()) !== null) {
+        tokens.push(tok);
+    }
+    if (tokens.length === 0) throw new Error('Empty expression');
+
+    let current = 0;
+    function lookahead() {
+        return tokens[current] || null;
+    }
+    function consume(expectedType, expectedValue) {
+        const t = tokens[current];
+        if (!t) throw new Error('Unexpected end of expression');
+        if (expectedType && t.type !== expectedType) {
+            throw new Error(`Expected ${expectedType} but found ${t.type}`);
+        }
+        if (expectedValue && t.value !== expectedValue) {
+            throw new Error(`Expected '${expectedValue}' but found '${t.value}'`);
+        }
+        current++;
+        return t;
+    }
+
+    function parseExpression() {
+        let left = parseTerm();
+        while (current < tokens.length) {
+            const next = lookahead();
+            if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
+                consume();
+                const right = parseTerm();
+                left = next.value === '+' ? left + right : left - right;
+            } else {
+                break;
+            }
+        }
+        return left;
+    }
+
+    function parseTerm() {
+        let left = parsePower();
+        while (current < tokens.length) {
+            const next = lookahead();
+            if (next && next.type === 'OP' && (next.value === '*' || next.value === '/' || next.value === '%')) {
+                consume();
+                const right = parsePower();
+                if (next.value === '*') {
+                    left = left * right;
+                } else if (next.value === '/') {
+                    if (right === 0) throw new Error('Division by zero');
+                    left = left / right;
+                } else if (next.value === '%') {
+                    if (right === 0) throw new Error('Modulo by zero');
+                    left = left % right;
+                }
+            } else {
+                break;
+            }
+        }
+        return left;
+    }
+
+    function parsePower() {
+        const base = parseUnary();
+        const next = lookahead();
+        if (next && next.type === 'OP' && next.value === '^') {
+            consume();
+            const exponent = parsePower(); // right-associative
+            return Math.pow(base, exponent);
+        }
+        return base;
+    }
+
+    function parseUnary() {
+        const next = lookahead();
+        if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
+            consume();
+            const val = parseUnary();
+            return next.value === '-' ? -val : val;
+        }
+        return parsePrimary();
+    }
+
+    function parsePrimary() {
+        const t = lookahead();
+        if (!t) throw new Error('Unexpected end of expression');
+
+        if (t.type === 'NUMBER') {
+            consume();
+            return t.value;
+        }
+
+        if (t.type === 'LPAREN') {
+            consume('LPAREN');
+            const val = parseExpression();
+            consume('RPAREN');
+            return val;
+        }
+
+        if (t.type === 'IDENT') {
+            consume('IDENT');
+            const name = t.value;
+
+            // Math Constants
+            if (name === 'pi') return Math.PI;
+            if (name === 'e') return Math.E;
+
+            // Safe Math Functions
+            const funcs = {
+                sqrt: Math.sqrt,
+                cbrt: Math.cbrt,
+                abs: Math.abs,
+                sin: Math.sin,
+                cos: Math.cos,
+                tan: Math.tan,
+                log: Math.log10,
+                log10: Math.log10,
+                ln: Math.log,
+                round: Math.round,
+                floor: Math.floor,
+                ceil: Math.ceil
+            };
+
+            if (Object.prototype.hasOwnProperty.call(funcs, name)) {
+                consume('LPAREN');
+                const arg = parseExpression();
+                consume('RPAREN');
+                return funcs[name](arg);
+            }
+
+            throw new Error(`Unknown function or variable: '${name}'`);
+        }
+
+        throw new Error(`Unexpected token '${t.value}' in expression`);
+    }
+
+    const result = parseExpression();
+    if (current < tokens.length) {
+        throw new Error(`Unexpected trailing token '${tokens[current].value}'`);
+    }
+    if (typeof result !== 'number' || !isFinite(result)) {
         throw new Error('Calculation did not yield a finite number');
     }
-    return Number(res.toFixed(8)) / 1; // Round cleanly
+    return Number(result.toFixed(8)) / 1;
 }
 
 // Morse code dictionaries

@@ -4,8 +4,23 @@ import config from '../../config/index.js';
 import db from '../../config/database.js';
 import { getBotStatus, requestPairing, initBotSocket, resetSession, restartBotSocket } from '../bot/socket.js';
 import { createSessionToken, isValidSession, requireAuth } from './auth.js';
+import { createRateLimiter } from './rateLimiter.js';
+import { sanitizeObject, isSafeRegex } from '../utils/security.js';
 import cfSync from '../services/cfSync.js';
 import logger from '../utils/logger.js';
+
+// Dedicated Rate Limiters for sensitive endpoints
+export const authLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: 'Too many login attempts. Please wait 1 minute before trying again.'
+});
+
+export const pairLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: 'Too many pairing requests. Please wait 1 minute before trying again.'
+});
 
 export function setupRoutes(app) {
     const publicDir = path.join(config.rootDir, 'public');
@@ -59,10 +74,16 @@ export function setupRoutes(app) {
         });
     });
 
-    app.post('/api/pair', async (req, res) => {
-        const { phone, frontendUrl } = req.body;
+    app.post('/api/pair', pairLimiter, async (req, res) => {
+        const { phone, frontendUrl } = req.body || {};
         if (!phone) {
             return res.status(400).json({ error: 'Phone number is required' });
+        }
+
+        // Strict input validation: numeric digits only, valid international phone length
+        const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+        if (cleanPhone.length < 8 || cleanPhone.length > 15) {
+            return res.status(400).json({ error: 'Invalid phone number format. Must contain 8 to 15 digits.' });
         }
 
         let discoveredFrontend = frontendUrl;
@@ -75,7 +96,7 @@ export function setupRoutes(app) {
         }
 
         try {
-            const code = await requestPairing(phone, { frontendUrl: discoveredFrontend });
+            const code = await requestPairing(cleanPhone, { frontendUrl: discoveredFrontend });
             res.json({ success: true, code });
         } catch (err) {
             logger.error({ err: err.message }, '[API] Pairing request error');
@@ -85,8 +106,18 @@ export function setupRoutes(app) {
     });
 
     app.post('/api/pair/reset', async (req, res) => {
+        const status = getBotStatus();
+        // Privilege protection: Active connected bot cannot be reset without authentication
+        if (status.connection === 'open') {
+            const authHeader = req.headers.authorization;
+            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
+            if (!isValidSession(token)) {
+                return res.status(403).json({ error: 'Active session cannot be reset without panel authentication.' });
+            }
+        }
+
         try {
-            logger.info('[API] Explicit pairing session reset requested');
+            logger.info('[API] Pairing session reset requested');
             await resetSession({ clearFiles: true });
             res.json({ success: true, message: 'Session reset successfully' });
         } catch (err) {
@@ -95,7 +126,18 @@ export function setupRoutes(app) {
         }
     });
 
+    // Bot disconnect endpoint: protects active connection from unauthorized disconnection
     app.post('/api/disconnect', async (req, res) => {
+        const status = getBotStatus();
+        // If bot is actively connected (open), strictly require panel authentication
+        if (status.connection === 'open') {
+            const authHeader = req.headers.authorization;
+            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
+            if (!isValidSession(token)) {
+                return res.status(401).json({ error: 'Unauthorized. Panel authentication required to disconnect active bot.' });
+            }
+        }
+
         try {
             logger.info('[API] Bot disconnect requested');
             await resetSession({ clearFiles: true });
@@ -107,11 +149,11 @@ export function setupRoutes(app) {
     });
 
     // ==========================================
-    // Authentication Endpoints
+    // Authentication Endpoints (/api/login & /api/auth/login)
     // ==========================================
-    app.post('/api/auth/login', (req, res) => {
-        const { password } = req.body;
-        if (!password) {
+    const handleLoginRequest = (req, res) => {
+        const { password } = req.body || {};
+        if (!password || typeof password !== 'string') {
             return res.status(400).json({ error: 'Password required' });
         }
 
@@ -122,17 +164,23 @@ export function setupRoutes(app) {
 
         const token = createSessionToken();
         res.json({ success: true, token });
-    });
+    };
 
-    app.get('/api/auth/check', (req, res) => {
+    app.post('/api/auth/login', authLimiter, handleLoginRequest);
+    app.post('/api/login', authLimiter, handleLoginRequest);
+
+    const handleAuthCheck = (req, res) => {
         const authHeader = req.headers.authorization;
         const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
         res.json({ authenticated: isValidSession(token) });
-    });
+    };
+
+    app.get('/api/auth/check', handleAuthCheck);
+    app.get('/api/check', handleAuthCheck);
 
     app.post('/api/auth/change-password', requireAuth, (req, res) => {
-        const { newPassword } = req.body;
-        if (!newPassword || newPassword.length < 4) {
+        const { newPassword } = req.body || {};
+        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
             return res.status(400).json({ error: 'Password must be at least 4 characters long' });
         }
 
@@ -145,31 +193,30 @@ export function setupRoutes(app) {
     // Protected Settings API
     // ==========================================
     app.get('/api/settings', requireAuth, (req, res) => {
-        const raw = db.getSettings();
-        const settings = { ...raw };
-        if (settings.sasaDevApiKey) {
-            settings.sasaDevApiKey = '••••••••••••••••••••••••••••••••••••••••••••';
-        }
-        res.json(settings);
+        const settings = db.getSettings();
+        // Secrets hygiene: mask sensitive keys so client browsers never receive raw credentials
+        res.json(db.maskSettings(settings));
     });
 
     app.post('/api/settings', requireAuth, (req, res) => {
         try {
-            const body = { ...req.body };
+            // Prototype pollution protection: sanitize all input keys
+            const rawBody = sanitizeObject(req.body || {});
+            const body = { ...rawBody };
+
+            // Secrets hygiene: ignore masked dummy strings sent back from frontend
             if (body.sasaDevApiKey && (body.sasaDevApiKey.includes('••••') || body.sasaDevApiKey.trim() === '')) {
                 delete body.sasaDevApiKey;
             }
+
             const updated = db.updateSettings(body);
             const status = getBotStatus();
             const phone = status.telemetry?.phoneNumber;
             if (phone) {
                 cfSync.saveSettingsToCloudflare(phone, updated).catch(() => {});
             }
-            const safeUpdated = { ...updated };
-            if (safeUpdated.sasaDevApiKey) {
-                safeUpdated.sasaDevApiKey = '••••••••••••••••••••••••••••••••••••••••••••';
-            }
-            res.json({ success: true, settings: safeUpdated });
+
+            res.json({ success: true, settings: db.maskSettings(updated) });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
@@ -183,17 +230,30 @@ export function setupRoutes(app) {
     });
 
     app.post('/api/replies', requireAuth, (req, res) => {
-        const { trigger, response, matchType } = req.body;
+        const { trigger, response, matchType } = req.body || {};
         if (!trigger || !response) {
             return res.status(400).json({ error: 'Trigger and response are required' });
         }
-        const created = db.addReply(trigger, response, matchType || 'contains');
-        const status = getBotStatus();
-        const phone = status.telemetry?.phoneNumber;
-        if (phone) {
-            cfSync.saveRepliesToCloudflare(phone, db.getReplies()).catch(() => {});
+
+        const cleanMatchType = matchType || 'contains';
+        if (cleanMatchType === 'regex') {
+            const check = isSafeRegex(trigger);
+            if (!check.safe) {
+                return res.status(400).json({ error: `Unsafe regex pattern: ${check.reason}` });
+            }
         }
-        res.json({ success: true, reply: created });
+
+        try {
+            const created = db.addReply(trigger, response, cleanMatchType);
+            const status = getBotStatus();
+            const phone = status.telemetry?.phoneNumber;
+            if (phone) {
+                cfSync.saveRepliesToCloudflare(phone, db.getReplies()).catch(() => {});
+            }
+            res.json({ success: true, reply: created });
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
     });
 
     app.delete('/api/replies/:id', requireAuth, (req, res) => {
@@ -214,11 +274,11 @@ export function setupRoutes(app) {
     });
 
     app.post('/api/schedules', requireAuth, (req, res) => {
-        const { jid, message, type, time } = req.body;
+        const { jid, message, type, time } = req.body || {};
         if (!jid || !message || !time) {
             return res.status(400).json({ error: 'Target JID/number, message, and time are required' });
         }
-        const entry = db.addSchedule({ jid, message, type: type || 'daily', time });
+        const entry = db.addSchedule({ jid: String(jid).trim(), message: String(message).trim(), type: type || 'daily', time: String(time).trim() });
         const status = getBotStatus();
         const phone = status.telemetry?.phoneNumber;
         if (phone) {
@@ -287,3 +347,5 @@ export function setupRoutes(app) {
         }
     });
 }
+
+export default setupRoutes;
