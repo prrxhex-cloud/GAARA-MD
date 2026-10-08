@@ -27,3 +27,6 @@ temp/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Product Catalog & Marketing Assets (Local only)
+assets/product_cover*
