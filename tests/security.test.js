@@ -14,6 +14,17 @@ import { validateMessage } from '../src/utils/antiBug.js';
 import { authLimiter, pairLimiter } from '../src/server/routes.js';
 
 describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
+    let globalOriginalSettings;
+
+    before(() => {
+        globalOriginalSettings = { ...db.getSettings() };
+    });
+
+    after(() => {
+        if (globalOriginalSettings) {
+            db.updateSettings(globalOriginalSettings);
+        }
+    });
 
     // ================================================================
     // 1. JWT Authentication, Token Forgery & Timing Attack Resistance
@@ -289,6 +300,7 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
 
         after(() => {
             if (server) server.close();
+            db.updateSettings({ botName: 'GAARA X MD', sasaDevApiKey: '' });
         });
 
         test('GET /api/settings masks sensitive API keys with bullet characters', async () => {
@@ -491,6 +503,10 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
     // 8. WhatsApp Protocol, Privilege Enforcement & Anti-Bug
     // ================================================================
     describe('8. Bot Privilege Enforcement & Anti-Bug Defense', () => {
+        after(() => {
+            db.updateSettings({ ownerNumber: '' });
+        });
+
         test('isOwner accurately recognizes owner fromMe and configured ownerNumber', () => {
             db.updateSettings({ ownerNumber: '94771234567' });
 
