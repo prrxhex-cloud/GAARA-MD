@@ -1,5 +1,9 @@
-let pollTimer = null;
-let apiBaseUrl = localStorage.getItem('api_base_url') || '';
+const PERMANENT_BACKEND_URL = 'https://gaara-md-cf37.onrender.com';
+let apiBaseUrl = localStorage.getItem('api_base_url') || (
+    typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+        ? PERMANENT_BACKEND_URL
+        : ''
+);
 
 // Parse ?api= URL query parameter for seamless Vercel frontend config
 const urlParams = new URLSearchParams(window.location.search);
@@ -19,7 +23,7 @@ function apiUrl(endpoint) {
 
 function promptBackendUrl() {
     const current = localStorage.getItem('api_base_url') || '';
-    const next = prompt('Enter your WhatsApp bot backend URL (e.g. https://gaara-x-md.onrender.com or leave blank for local/same origin):', current);
+    const next = prompt(`Enter your WhatsApp bot backend URL (default: ${PERMANENT_BACKEND_URL} or leave blank for local/same origin):`, current || PERMANENT_BACKEND_URL);
     if (next !== null) {
         const cleaned = next.trim().replace(/\/+$/, '');
         localStorage.setItem('api_base_url', cleaned);
