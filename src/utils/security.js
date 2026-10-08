@@ -34,14 +34,24 @@ export function isSafeRegex(pattern) {
         return { safe: false, reason: 'Detected dangerous nested quantifier (catastrophic backtracking risk)' };
     }
 
-    // b. Overlapping alternations inside repeated group: e.g. (a|a)+, (.*|a)+
-    const overlappingRepeatedAlternation = /\(([^|()]+)\|([^|()]+)\)[*+]/;
-    const altMatch = pattern.match(overlappingRepeatedAlternation);
-    if (altMatch && altMatch[1] && altMatch[2]) {
-        const left = altMatch[1].trim();
-        const right = altMatch[2].trim();
-        if (left === right || left.startsWith(right) || right.startsWith(left)) {
-            return { safe: false, reason: 'Detected overlapping alternation in repeated group' };
+    // b. Overlapping alternations inside repeated group: e.g. (a|a)+, (a|b|a)+, (.*|a)+
+    const repeatedGroupRegex = /\(([^()]+)\)(?:[*+]|\{[0-9]+,?[0-9]*\})/g;
+    let match;
+    while ((match = repeatedGroupRegex.exec(pattern)) !== null) {
+        const inner = match[1];
+        if (inner.includes('|')) {
+            const branches = inner.split('|').map(s => s.trim());
+            if (branches.length >= 2) {
+                for (let i = 0; i < branches.length; i++) {
+                    for (let j = i + 1; j < branches.length; j++) {
+                        const b1 = branches[i];
+                        const b2 = branches[j];
+                        if (b1 === b2 || (b1.length > 0 && b2.startsWith(b1)) || (b2.length > 0 && b1.startsWith(b2))) {
+                            return { safe: false, reason: 'Detected overlapping alternation in repeated group' };
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -101,7 +111,14 @@ export function sanitizeFilename(filename, fallback = 'file') {
         .replace(/\.\.+/g, '_') // Directory traversal dots
         .trim();
 
-    if (!clean) return fallback;
+    // Prevent Windows DOS reserved device name hijacking (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    const base = clean.split('.')[0].toLowerCase();
+    const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+    if (reserved.test(base)) {
+        clean = `_${clean}`;
+    }
+
+    if (!clean || clean === '_') return fallback;
     return clean.slice(0, 120);
 }
 

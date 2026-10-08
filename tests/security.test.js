@@ -9,20 +9,29 @@ import { createSessionToken, isValidSession, revokeSessionToken } from '../src/s
 import { createRateLimiter } from '../src/server/rateLimiter.js';
 import { isSafeRegex, sanitizeObject, sanitizeFilename, maskSecret } from '../src/utils/security.js';
 import { safeCalc } from '../src/commands/utilities.js';
-import { isOwner } from '../src/commands/owner.js';
+import { isOwner, ownerCommands } from '../src/commands/owner.js';
 import { validateMessage } from '../src/utils/antiBug.js';
 import { authLimiter, pairLimiter } from '../src/server/routes.js';
 
 describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
     let globalOriginalSettings;
+    let globalOriginalAdmin;
 
     before(() => {
         globalOriginalSettings = { ...db.getSettings() };
+        const admin = db.getAdminUser();
+        globalOriginalAdmin = admin ? { ...admin } : null;
     });
 
     after(() => {
         if (globalOriginalSettings) {
             db.updateSettings(globalOriginalSettings);
+        }
+        if (globalOriginalAdmin) {
+            const users = db._readSafe(db.usersFile, {});
+            users.admin = { ...globalOriginalAdmin };
+            db._cachedUsers = users;
+            db._writeSafe(db.usersFile, users);
         }
     });
 
@@ -283,6 +292,26 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
                 assert.ok(data.error.includes(tc.expectedErr));
             }
         });
+
+        test('Protected routes reject authentication via URL query string to prevent log leaks', async () => {
+            const validToken = createSessionToken();
+            const res = await fetch(`http://localhost:${port}/api/settings?token=${validToken}`);
+            assert.equal(res.status, 401, 'Passing tokens in query strings must be rejected to prevent leakage in access logs');
+        });
+
+        test('Pairing reset endpoint enforces rate limiting against DoS flooding', async () => {
+            pairLimiter.reset();
+
+            for (let i = 0; i < 5; i++) {
+                const res = await fetch(`http://localhost:${port}/api/pair/reset`, { method: 'POST' });
+                // Either 200 or 403 depending on connection status, but NOT 429 yet
+                assert.ok(res.status === 200 || res.status === 403);
+            }
+
+            const blocked = await fetch(`http://localhost:${port}/api/pair/reset`, { method: 'POST' });
+            assert.equal(blocked.status, 429, 'Excessive calls to /api/pair/reset must trigger 429 rate limit');
+            pairLimiter.reset();
+        });
     });
 
     // ================================================================
@@ -413,6 +442,14 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
             assert.throws(() => safeCalc('2 + * 3'), /Unexpected token/);
             assert.throws(() => safeCalc('(2 + 3'), /Unexpected end of expression/);
         });
+
+        test('Rejects overly deep recursion and oversized math expressions', () => {
+            const deepExpr = '('.repeat(50) + '1' + ')'.repeat(50);
+            assert.throws(() => safeCalc(deepExpr), /too complex or deeply nested/);
+
+            const oversizedExpr = '1 + ' + '2 + '.repeat(100) + '3';
+            assert.throws(() => safeCalc(oversizedExpr), /Expression too long/);
+        });
     });
 
     // ================================================================
@@ -444,7 +481,10 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
                 '([a-zA-Z]+)+',
                 '(\\d+)+',
                 '(a|a)+',
+                '(a|b|a)+',
                 '(hello|hello)+',
+                '(foo|bar|foo)+',
+                '(x|y|z|x)+',
                 '(.*a)+'
             ];
 
@@ -496,6 +536,11 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
             assert.equal(sanitizeFilename('song\0evil.mp3', 'fallback'), 'songevil.mp3');
             assert.equal(sanitizeFilename('normal song - artist', 'fallback'), 'normal song - artist');
             assert.equal(sanitizeFilename('', 'default'), 'default');
+            // Windows DOS reserved device names
+            assert.equal(sanitizeFilename('con.mp3', 'fallback'), '_con.mp3');
+            assert.equal(sanitizeFilename('PRN.txt', 'fallback'), '_PRN.txt');
+            assert.equal(sanitizeFilename('AUX', 'fallback'), '_AUX');
+            assert.equal(sanitizeFilename('NUL.wav', 'fallback'), '_NUL.wav');
         });
     });
 
@@ -576,6 +621,26 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
                 message: { conversation: 'Hello GAARA X MD!' }
             };
             assert.equal(validateMessage(normalMsg).safe, true);
+        });
+
+        test('ownerCommands.clearcache executes cleanly without ReferenceError', async () => {
+            const sent = [];
+            const mockSock = {
+                sendMessage: async (jid, content) => {
+                    sent.push({ jid, content });
+                }
+            };
+            const mockMsg = { key: { fromMe: true } };
+
+            await ownerCommands.clearcache.run({
+                sock: mockSock,
+                msg: mockMsg,
+                jid: 'owner@s.whatsapp.net',
+                sender: 'owner@s.whatsapp.net'
+            });
+
+            assert.equal(sent.length, 1);
+            assert.ok(sent[0].content.text.includes('Cache Cleared!'));
         });
     });
 });

@@ -27,13 +27,13 @@ export function createRateLimiter({
     }
 
     const middleware = function rateLimitMiddleware(req, res, next) {
-        // Resolve client IP (support Cloudflare, proxies, and direct socket)
-        const ip =
+        // Resolve client IP (support Cloudflare, trusted Express proxy, and direct socket)
+        const rawIp =
             req.headers['cf-connecting-ip'] ||
-            (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) ||
             req.ip ||
             req.socket?.remoteAddress ||
             '127.0.0.1';
+        const ip = typeof rawIp === 'string' ? rawIp.trim().slice(0, 100) : '127.0.0.1';
 
         const now = Date.now();
         let record = hits.get(ip);

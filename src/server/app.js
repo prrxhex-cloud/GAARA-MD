@@ -11,6 +11,9 @@ export function createServer() {
     // Disable X-Powered-By to prevent framework fingerprinting
     app.disable('x-powered-by');
 
+    // Trust reverse proxy (Cloudflare / Render / Vercel)
+    app.set('trust proxy', 1);
+
     // Security HTTP Headers (Defense-in-depth against Clickjacking, MIME sniffing, XSS)
     app.use((req, res, next) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');

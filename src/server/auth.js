@@ -142,8 +142,6 @@ export function requireAuth(req, res, next) {
         token = authHeader.slice(7).trim();
     } else if (req.headers['x-panel-token']) {
         token = req.headers['x-panel-token'];
-    } else if (req.query && req.query.token) {
-        token = req.query.token;
     }
 
     if (!isValidSession(token)) {

@@ -12,6 +12,7 @@ import {
     sendClassicButtons
 } from '../bot/buttons.js';
 import logger from '../utils/logger.js';
+import { messageCache, rateLimitCache } from '../bot/cache.js';
 
 const execPromise = util.promisify(exec);
 

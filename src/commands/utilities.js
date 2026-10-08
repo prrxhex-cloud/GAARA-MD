@@ -11,8 +11,10 @@ import { extractText } from '../utils/antiBug.js';
 export function safeCalc(expr) {
     if (!expr || typeof expr !== 'string') throw new Error('Empty expression');
 
-    let pos = 0;
     const str = expr.trim();
+    if (str.length > 300) throw new Error('Expression too long (maximum 300 characters)');
+
+    let pos = 0;
 
     function nextToken() {
         while (pos < str.length && /\s/.test(str[pos])) pos++;
@@ -80,19 +82,35 @@ export function safeCalc(expr) {
         return t;
     }
 
-    function parseExpression() {
-        let left = parseTerm();
-        while (current < tokens.length) {
-            const next = lookahead();
-            if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
-                consume();
-                const right = parseTerm();
-                left = next.value === '+' ? left + right : left - right;
-            } else {
-                break;
-            }
+    let depth = 0;
+    const MAX_DEPTH = 35;
+    function enterNode() {
+        if (++depth > MAX_DEPTH) {
+            throw new Error('Expression too complex or deeply nested');
         }
-        return left;
+    }
+    function exitNode() {
+        depth--;
+    }
+
+    function parseExpression() {
+        enterNode();
+        try {
+            let left = parseTerm();
+            while (current < tokens.length) {
+                const next = lookahead();
+                if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
+                    consume();
+                    const right = parseTerm();
+                    left = next.value === '+' ? left + right : left - right;
+                } else {
+                    break;
+                }
+            }
+            return left;
+        } finally {
+            exitNode();
+        }
     }
 
     function parseTerm() {
@@ -119,24 +137,34 @@ export function safeCalc(expr) {
     }
 
     function parsePower() {
-        const base = parseUnary();
-        const next = lookahead();
-        if (next && next.type === 'OP' && next.value === '^') {
-            consume();
-            const exponent = parsePower(); // right-associative
-            return Math.pow(base, exponent);
+        enterNode();
+        try {
+            const base = parseUnary();
+            const next = lookahead();
+            if (next && next.type === 'OP' && next.value === '^') {
+                consume();
+                const exponent = parsePower(); // right-associative
+                return Math.pow(base, exponent);
+            }
+            return base;
+        } finally {
+            exitNode();
         }
-        return base;
     }
 
     function parseUnary() {
-        const next = lookahead();
-        if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
-            consume();
-            const val = parseUnary();
-            return next.value === '-' ? -val : val;
+        enterNode();
+        try {
+            const next = lookahead();
+            if (next && next.type === 'OP' && (next.value === '+' || next.value === '-')) {
+                consume();
+                const val = parseUnary();
+                return next.value === '-' ? -val : val;
+            }
+            return parsePrimary();
+        } finally {
+            exitNode();
         }
-        return parsePrimary();
     }
 
     function parsePrimary() {

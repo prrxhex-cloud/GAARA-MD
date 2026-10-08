@@ -17,8 +17,23 @@ class JsonDatabase extends EventEmitter {
         this.callsFile = path.join(this.dataDir, 'calls.json');
         this.usersFile = path.join(this.dataDir, 'users.json');
         this._cachedSettings = null;
+        this._cachedUsers = null;
 
         this.init();
+    }
+
+    _cleanOrphanedTmpFiles() {
+        try {
+            if (!fs.existsSync(this.dataDir)) return;
+            const entries = fs.readdirSync(this.dataDir);
+            for (const entry of entries) {
+                if (entry.includes('.tmp.')) {
+                    try {
+                        fs.unlinkSync(path.join(this.dataDir, entry));
+                    } catch {}
+                }
+            }
+        } catch {}
     }
 
     _readSafe(file, defaultVal) {
@@ -36,16 +51,40 @@ class JsonDatabase extends EventEmitter {
     }
 
     _writeSafe(file, data) {
+        const json = JSON.stringify(data, null, 2);
+        const uniqueId = `${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
+        const tempFile = `${file}.tmp.${uniqueId}`;
         try {
-            const tempFile = `${file}.tmp.${Date.now()}`;
-            fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
-            fs.renameSync(tempFile, file);
+            fs.writeFileSync(tempFile, json, 'utf-8');
+            try {
+                fs.renameSync(tempFile, file);
+            } catch (renameErr) {
+                // Windows lock fallback: copyFileSync then unlinkSync
+                try {
+                    fs.copyFileSync(tempFile, file);
+                } catch {
+                    fs.writeFileSync(file, json, 'utf-8');
+                }
+            }
         } catch (err) {
-            console.error(`[DB] Error writing ${file}:`, err.message);
+            // Direct write fallback
+            try {
+                fs.writeFileSync(file, json, 'utf-8');
+            } catch (directErr) {
+                console.error(`[DB] Error writing ${file}:`, directErr.message);
+            }
+        } finally {
+            if (fs.existsSync(tempFile)) {
+                try {
+                    fs.unlinkSync(tempFile);
+                } catch {}
+            }
         }
     }
 
     init() {
+        this._cleanOrphanedTmpFiles();
+
         // 1. Settings
         const currentSettings = this._readSafe(this.settingsFile, null);
         if (!currentSettings) {
@@ -101,7 +140,10 @@ class JsonDatabase extends EventEmitter {
                     updatedAt: new Date().toISOString()
                 }
             };
+            this._cachedUsers = userObj;
             this._writeSafe(this.usersFile, userObj);
+        } else {
+            this._cachedUsers = users;
         }
     }
 
@@ -240,20 +282,23 @@ class JsonDatabase extends EventEmitter {
 
     // --- Panel User / Password Auth ---
     getAdminUser() {
-        const users = this._readSafe(this.usersFile, {});
-        return users.admin || null;
+        if (!this._cachedUsers) {
+            this._cachedUsers = this._readSafe(this.usersFile, {});
+        }
+        return this._cachedUsers?.admin || null;
     }
 
     verifyAdminPassword(plainPassword) {
         if (!plainPassword || typeof plainPassword !== 'string') return false;
         const admin = this.getAdminUser();
-        // Timing attack resistance: use dummy bcrypt hash if admin does not exist
-        const targetHash = admin?.passwordHash || '$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012';
+        // Timing attack resistance: use valid pre-computed bcrypt hash if admin does not exist
+        const targetHash = admin?.passwordHash || '$2b$10$NNkidZ.iGAtTVUM6229Us.VXJ1b03dl4Yy/sSfvEwGrhyA5mnAGEe';
         const isMatch = bcrypt.compareSync(plainPassword, targetHash);
         return Boolean(admin && admin.passwordHash && isMatch);
     }
 
     updateAdminPassword(newPassword) {
+        if (!newPassword || typeof newPassword !== 'string') return false;
         const users = this._readSafe(this.usersFile, {});
         const salt = bcrypt.genSaltSync(10);
         const passwordHash = bcrypt.hashSync(newPassword, salt);
@@ -263,6 +308,7 @@ class JsonDatabase extends EventEmitter {
             lastGeneratedPassword: null,
             updatedAt: new Date().toISOString()
         };
+        this._cachedUsers = users;
         this._writeSafe(this.usersFile, users);
         return true;
     }

@@ -105,7 +105,7 @@ export function setupRoutes(app) {
         }
     });
 
-    app.post('/api/pair/reset', async (req, res) => {
+    app.post('/api/pair/reset', pairLimiter, async (req, res) => {
         const status = getBotStatus();
         // Privilege protection: Active connected bot cannot be reset without authentication
         if (status.connection === 'open') {
@@ -127,7 +127,7 @@ export function setupRoutes(app) {
     });
 
     // Bot disconnect endpoint: protects active connection from unauthorized disconnection
-    app.post('/api/disconnect', async (req, res) => {
+    app.post('/api/disconnect', authLimiter, async (req, res) => {
         const status = getBotStatus();
         // If bot is actively connected (open), strictly require panel authentication
         if (status.connection === 'open') {
