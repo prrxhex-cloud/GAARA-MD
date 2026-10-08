@@ -35,6 +35,14 @@ export function unwrapMessage(msgOrContent) {
             curr = curr.viewOnceMessageV2.message;
         } else if (curr.viewOnceMessageV2Extension?.message) {
             curr = curr.viewOnceMessageV2Extension.message;
+        } else if (curr.protocolMessage?.editedMessage?.message) {
+            curr = curr.protocolMessage.editedMessage.message;
+        } else if (curr.protocolMessage?.editedMessage) {
+            curr = curr.protocolMessage.editedMessage;
+        } else if (curr.editedMessage?.message) {
+            curr = curr.editedMessage.message;
+        } else if (curr.editedMessage) {
+            curr = curr.editedMessage;
         } else {
             break;
         }
@@ -70,7 +78,12 @@ export function cacheMessage(msg) {
                 existingUnwrapped.imageMessage ||
                 existingUnwrapped.videoMessage ||
                 existingUnwrapped.audioMessage ||
-                existingUnwrapped.documentMessage
+                existingUnwrapped.documentMessage ||
+                existingUnwrapped.stickerMessage ||
+                existingUnwrapped.contactMessage ||
+                existingUnwrapped.locationMessage ||
+                existingUnwrapped.pollCreationMessage ||
+                existingUnwrapped.pollCreationMessageV3
             );
 
             // If existing entry has valid text or media, and incoming message is empty or a protocol message, preserve existing

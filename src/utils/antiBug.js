@@ -50,21 +50,29 @@ export function validateMessage(msg) {
  * Helper to safely extract text from any message format.
  */
 export function extractText(msg) {
-    if (!msg || !msg.message) return '';
-    let m = msg.message;
+    if (!msg || typeof msg !== 'object') return '';
+    let m = msg.message || msg;
     while (m) {
         if (m.ephemeralMessage?.message) {
             m = m.ephemeralMessage.message;
+        } else if (m.deviceSentMessage?.message) {
+            m = m.deviceSentMessage.message;
+        } else if (m.documentWithCaptionMessage?.message) {
+            m = m.documentWithCaptionMessage.message;
         } else if (m.viewOnceMessage?.message) {
             m = m.viewOnceMessage.message;
         } else if (m.viewOnceMessageV2?.message) {
             m = m.viewOnceMessageV2.message;
         } else if (m.viewOnceMessageV2Extension?.message) {
             m = m.viewOnceMessageV2Extension.message;
-        } else if (m.deviceSentMessage?.message) {
-            m = m.deviceSentMessage.message;
-        } else if (m.documentWithCaptionMessage?.message) {
-            m = m.documentWithCaptionMessage.message;
+        } else if (m.protocolMessage?.editedMessage?.message) {
+            m = m.protocolMessage.editedMessage.message;
+        } else if (m.protocolMessage?.editedMessage) {
+            m = m.protocolMessage.editedMessage;
+        } else if (m.editedMessage?.message) {
+            m = m.editedMessage.message;
+        } else if (m.editedMessage) {
+            m = m.editedMessage;
         } else {
             break;
         }
@@ -92,6 +100,12 @@ export function extractText(msg) {
         m.interactiveResponseMessage?.body?.text ||
         m.listResponseMessage?.singleSelectReply?.selectedRowId ||
         m.listResponseMessage?.title ||
+        m.pollCreationMessage?.name ||
+        m.pollCreationMessageV3?.name ||
+        m.locationMessage?.name ||
+        m.locationMessage?.comment ||
+        m.contactMessage?.displayName ||
+        m.reactionMessage?.text ||
         ''
     );
 }

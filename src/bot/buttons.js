@@ -1,7 +1,7 @@
 import { makeVoidExtrasSocket } from '@sasa-dev/void-baileys';
 import db from '../../config/database.js';
 import cfSync from '../services/cfSync.js';
-import { formatFramedMessage, getBotAdReplyContext, getBotIconBuffer } from './format.js';
+import { formatFramedMessage, getBotAdReplyContext, getBotIconBuffer, wrapSocketWithBranding } from './format.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
 import { isOwner } from '../commands/owner.js';
 import logger from '../utils/logger.js';
@@ -154,7 +154,8 @@ export async function sendSettingsButtons(sock, jid, quotedMsg = null, subCatego
                 text,
                 footer: settings.footerText || BOT_FOOTER,
                 buttons: activeButtons,
-                ...(botIcon ? { image: botIcon } : {})
+                ...(botIcon ? { image: botIcon } : {}),
+                contextInfo: getBotAdReplyContext()
             });
         }
     } catch (err) {
@@ -261,6 +262,7 @@ export function extractButtonPayload(msg) {
  */
 export async function handleSettingsButtonAction(sock, msg, payload) {
     if (!payload) return false;
+    const socket = wrapSocketWithBranding(sock);
     const rawId = (payload.id || '').toLowerCase().trim();
     const rawText = (payload.text || '').toLowerCase().trim();
     const cleanId = rawId.replace(/[[\]]/g, '').trim();
@@ -268,22 +270,40 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
 
     // Demo button actions (supporting pizza and void extras examples)
     if (cleanId === 'order-pizza' || cleanText === 'order pizza') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '🍕 *Order Placed!* Your pizza is being prepared.' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '🍕 *Order Placed!* Your pizza is being prepared.',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     } else if (cleanId === 'track-order' || cleanText === 'track order') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '🚚 *Tracking:* Your pizza is on the way!' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '🚚 *Tracking:* Your pizza is on the way!',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     } else if (cleanId === 'talk-human' || cleanText === 'talk to a human') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '📞 *Support:* An agent will contact you shortly.' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '📞 *Support:* An agent will contact you shortly.',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     } else if (cleanId === 'pizza' || cleanText === 'pizza') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '🍕 You chose delicious Pizza!' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '🍕 You chose delicious Pizza!',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     } else if (cleanId === 'burger' || cleanText === 'burger') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '🍔 You chose juicy Burger!' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '🍔 You chose juicy Burger!',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     } else if (cleanId === 'old-school' || cleanText === 'old style') {
-        await sock.sendMessage(msg.key.remoteJid, { text: '📻 Legacy classic button tapped!' }, { quoted: msg });
+        await socket.sendMessage(msg.key.remoteJid, {
+            text: '📻 Legacy classic button tapped!',
+            contextInfo: getBotAdReplyContext()
+        }, { quoted: msg });
         return true;
     }
 
@@ -349,7 +369,7 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
 
     // Verify Owner authorization
     if (!isOwner(msg, sender)) {
-        await sock.sendMessage(remoteJid, {
+        await socket.sendMessage(remoteJid, {
             text: '🔒 Only the bot owner can configure settings.',
             contextInfo: getBotAdReplyContext()
         }, { quoted: msg });
@@ -389,7 +409,7 @@ export async function handleSettingsButtonAction(sock, msg, payload) {
         footer: updated.footerText || BOT_FOOTER
     });
 
-    await sock.sendMessage(remoteJid, {
+    await socket.sendMessage(remoteJid, {
         text: confirmNotice,
         contextInfo: getBotAdReplyContext()
     }, { quoted: msg });

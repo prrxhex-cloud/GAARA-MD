@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import db from '../config/database.js';
 import { validateMessage, extractText } from '../src/utils/antiBug.js';
-import { formatFramedMessage, formatConnectedSetupMessage, resolveDestinationJid } from '../src/bot/format.js';
+import { formatFramedMessage, formatConnectedSetupMessage, resolveDestinationJid, getBotIconBuffer, getBotAdReplyContext, wrapSocketWithBranding } from '../src/bot/format.js';
 import { cacheMessage, getCachedMessage } from '../src/bot/cache.js';
 import { handleEdit } from '../src/handlers/antiEdit.js';
 import { handleRevoke } from '../src/handlers/antiDelete.js';
@@ -1661,6 +1661,182 @@ describe('9. Void Baileys Native Power, SASA DEV API & Trigger Normalization Tes
         assert.equal(mockSock.sentMessages.length, 1);
         assert.equal(mockSock.sentMessages[0].content.poll.name, 'Rate GAARA X MD');
         assert.equal(mockSock.sentMessages[0].content.poll.values.length, 3);
+    });
+
+    test('wrapSocketWithBranding automatically embeds externalAdReply with bot thumbnail and footer to sendMessage', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        const brandedSock = wrapSocketWithBranding(mockSock);
+        await brandedSock.sendMessage('12345@s.whatsapp.net', { text: 'Hello without explicit context' });
+
+        assert.equal(mockSock.sentMessages.length, 1);
+        const sent = mockSock.sentMessages[0];
+        assert.ok(sent.content.contextInfo, 'Must have contextInfo attached');
+        assert.ok(sent.content.contextInfo.externalAdReply, 'Must have externalAdReply attached');
+        assert.equal(sent.content.contextInfo.externalAdReply.body, BOT_FOOTER);
+        assert.equal(sent.content.contextInfo.externalAdReply.title, 'GAARA X MD');
+        assert.ok(sent.content.contextInfo.externalAdReply.thumbnail, 'Must include bot icon thumbnail buffer');
+
+        // Verify reaction or poll stanzas are not mutated with contextInfo
+        mockSock.sentMessages = [];
+        await brandedSock.sendMessage('12345@s.whatsapp.net', { react: { text: '👍', key: { id: 'k' } } });
+        assert.equal(mockSock.sentMessages.length, 1);
+        assert.equal(mockSock.sentMessages[0].content.contextInfo, undefined, 'Reactions must not have contextInfo');
+    });
+
+    test('dispatchBotLog embeds externalAdReply with bot thumbnail and footer in system logs', async () => {
+        const mockSock = {
+            user: { id: '94770000000@s.whatsapp.net' },
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'log-id' } };
+            }
+        };
+
+        db.updateSettings({ botLogs: true, botLogsDestination: 'self' });
+        await dispatchBotLog(mockSock, { title: 'TEST RUNTIME LOG', emoji: '⚙️', content: ['Detailed log message'] });
+
+        assert.equal(mockSock.sentMessages.length, 1);
+        const logSent = mockSock.sentMessages[0];
+        assert.ok(logSent.content.text.includes('TEST RUNTIME LOG'));
+        assert.ok(logSent.content.text.includes('THIS BOT BUILT BY GAARA DEV OFC.'));
+        assert.ok(logSent.content.contextInfo, 'System log must have contextInfo');
+        assert.ok(logSent.content.contextInfo.externalAdReply, 'System log must embed externalAdReply');
+        assert.equal(logSent.content.contextInfo.externalAdReply.body, BOT_FOOTER);
+    });
+
+    test('extractText extracts text from unwrapped objects, edited messages, and polls without (No text content)', () => {
+        // Direct object without .message property
+        assert.equal(extractText({ conversation: 'Raw direct text' }), 'Raw direct text');
+        assert.equal(extractText({ extendedTextMessage: { text: 'Raw extended text' } }), 'Raw extended text');
+
+        // Edited message nested container
+        const editedWrapper = {
+            protocolMessage: {
+                type: 14,
+                editedMessage: {
+                    conversation: 'Edited conversation text'
+                }
+            }
+        };
+        assert.equal(extractText(editedWrapper), 'Edited conversation text');
+
+        // Poll creation message
+        assert.equal(extractText({ pollCreationMessage: { name: 'What is your favorite feature?' } }), 'What is your favorite feature?');
+
+        // Location message
+        assert.equal(extractText({ locationMessage: { name: 'Colombo Harbor' } }), 'Colombo Harbor');
+    });
+
+    test('View-Once .readviewonce unwraps deviceSentMessage and falls back to cache', async () => {
+        const groupJid = '999999-group@g.us';
+        const mockSock = {
+            user: { id: '94770000000:1@s.whatsapp.net' },
+            sentMessages: [],
+            downloadMedia: async (container) => Buffer.from('device-sent-vo-buffer'),
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ viewOnceDestination: 'self', ownerNumber: '94770000000' });
+
+        // 1. Quoting deviceSentMessage wrapping viewOnceMessage
+        const deviceSentMsg = {
+            key: { id: 'cmd-vv-dev', remoteJid: groupJid, participant: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '.vv',
+                    contextInfo: {
+                        quotedMessage: {
+                            deviceSentMessage: {
+                                message: {
+                                    viewOnceMessage: {
+                                        message: {
+                                            imageMessage: { caption: 'Device sent VO caption', viewOnce: true }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const voCmd = getCommand('vv');
+        assert.ok(voCmd);
+        await voCmd.run({ sock: mockSock, msg: deviceSentMsg, jid: groupJid });
+
+        const devSentMedia = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(devSentMedia, 'Media must be extracted from deviceSentMessage');
+        assert.equal(devSentMedia.jid, '94770000000@s.whatsapp.net');
+        assert.ok(devSentMedia.content.caption.includes('Device sent VO caption'));
+
+        // 2. Cache fallback when quotedMessage in stanza is empty / stripped
+        mockSock.sentMessages = [];
+        cacheMessage({
+            key: { id: 'cached-vo-stanza-123', remoteJid: groupJid, participant: '94771111111@s.whatsapp.net' },
+            message: {
+                viewOnceMessage: {
+                    message: {
+                        imageMessage: { caption: 'Cached VO fallback image', viewOnce: true }
+                    }
+                }
+            }
+        });
+
+        const strippedQuoteMsg = {
+            key: { id: 'cmd-vv-stripped', remoteJid: groupJid, participant: '94770000000@s.whatsapp.net', fromMe: true },
+            message: {
+                extendedTextMessage: {
+                    text: '.vv',
+                    contextInfo: {
+                        stanzaId: 'cached-vo-stanza-123',
+                        quotedMessage: {}
+                    }
+                }
+            }
+        };
+
+        await voCmd.run({ sock: mockSock, msg: strippedQuoteMsg, jid: groupJid });
+        const cachedFallbackMedia = mockSock.sentMessages.find(m => m.content.image);
+        assert.ok(cachedFallbackMedia, 'Must fall back to cached VO message when quotedMessage is empty');
+        assert.ok(cachedFallbackMedia.content.caption.includes('Cached VO fallback image'));
+    });
+
+    test('Interactive button taps with command in buttonPayload.id execute immediately', async () => {
+        const mockSock = {
+            sentMessages: [],
+            sendMessage: async (jid, content, options) => {
+                mockSock.sentMessages.push({ jid, content, options });
+                return { key: { id: 'sent-id' } };
+            }
+        };
+
+        db.updateSettings({ mode: 'public' });
+
+        // Tapped button with displayText "Click for Info" but id ".alive"
+        const buttonMsg = {
+            key: { id: 'btn-tap-msg-1', remoteJid: '94770000000@s.whatsapp.net', fromMe: false },
+            message: {
+                buttonsResponseMessage: {
+                    selectedDisplayText: 'Click for Info',
+                    selectedButtonId: '.alive'
+                }
+            }
+        };
+
+        await handleIncomingMessage(mockSock, buttonMsg);
+        assert.ok(mockSock.sentMessages.some(m => m.content.text && m.content.text.includes('STATUS ALIVE')));
     });
 });
 

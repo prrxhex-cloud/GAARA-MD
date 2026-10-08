@@ -17,11 +17,13 @@ import { handleRevoke } from '../handlers/antiDelete.js';
 import { handleEdit } from '../handlers/antiEdit.js';
 import { handleCall } from '../handlers/antiCall.js';
 import { startScheduler, stopScheduler } from '../handlers/scheduler.js';
-import { formatConnectedSetupMessage, getBotIconBuffer, getBotAdReplyContext } from './format.js';
+import { formatConnectedSetupMessage, getBotIconBuffer, getBotAdReplyContext, wrapSocketWithBranding } from './format.js';
+import { checkMemoryGuard } from './extras.js';
 import { dispatchBotLog } from './loggerNotifier.js';
 import { messageCache } from './cache.js';
 
 let sockInstance = null;
+let memoryGuardInterval = null;
 let currentPairingCode = null;
 let connectionState = 'connecting'; // 'disconnected' | 'connecting' | 'open' | 'unlinked'
 let isInitialSync = false;
@@ -86,6 +88,10 @@ export async function resetSession({ clearFiles = true } = {}) {
     try {
         logger.info('[Bot] Resetting bot session and socket engine...');
         stopScheduler();
+        if (memoryGuardInterval) {
+            clearInterval(memoryGuardInterval);
+            memoryGuardInterval = null;
+        }
 
         if (sockInstance) {
             try {
@@ -182,6 +188,7 @@ export async function initBotSocket() {
         } catch (e) {
             logger.debug({ err: e.message }, '[Bot] makeVoidExtrasSocket attachment notice');
         }
+        wrapSocketWithBranding(sock);
         sockInstance = sock;
 
         // Credentials update
@@ -200,6 +207,11 @@ export async function initBotSocket() {
                 connectionState = 'open';
                 currentPairingCode = null;
                 botTelemetry.connectedAt = Date.now();
+
+                // Start active memory guard enforcement (checks threshold every 60s)
+                if (!memoryGuardInterval) {
+                    memoryGuardInterval = setInterval(() => checkMemoryGuard(config.memoryGuardMb || 200), 60000);
+                }
 
                 const myJid = sock.user?.id ? (sock.parseJid ? sock.parseJid(sock.user.id) : sock.user.id.split(':')[0] + '@s.whatsapp.net') : null;
                 const phone = myJid ? myJid.split('@')[0] : 'Unknown';
@@ -229,6 +241,10 @@ export async function initBotSocket() {
 
             if (connection === 'close') {
                 stopScheduler();
+                if (memoryGuardInterval) {
+                    clearInterval(memoryGuardInterval);
+                    memoryGuardInterval = null;
+                }
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 

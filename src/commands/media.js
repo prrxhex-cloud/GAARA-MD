@@ -8,6 +8,7 @@ import {
     toMp3
 } from '../utils/media.js';
 import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext } from '../bot/format.js';
+import { getCachedMessage } from '../bot/cache.js';
 import { BOT_FOOTER } from '../../config/constants.js';
 import db from '../../config/database.js';
 import logger from '../utils/logger.js';
@@ -152,8 +153,11 @@ export const mediaCommands = {
             const context = msg.message?.extendedTextMessage?.contextInfo;
             const quoted = context?.quotedMessage;
 
-            if (!quoted) {
-                return sock.sendMessage(jid, { text: '⚠️ Reply to a View-Once image, video, or audio with *.readviewonce* or *.vv*' }, { quoted: msg });
+            if (!quoted && !context?.stanzaId) {
+                return sock.sendMessage(jid, {
+                    text: '⚠️ Reply to a View-Once image, video, or audio with *.readviewonce* or *.vv*',
+                    contextInfo: getBotAdReplyContext()
+                }, { quoted: msg });
             }
 
             let curr = quoted;
@@ -161,6 +165,10 @@ export const mediaCommands = {
             while (curr) {
                 if (curr.ephemeralMessage?.message) {
                     curr = curr.ephemeralMessage.message;
+                } else if (curr.deviceSentMessage?.message) {
+                    curr = curr.deviceSentMessage.message;
+                } else if (curr.documentWithCaptionMessage?.message) {
+                    curr = curr.documentWithCaptionMessage.message;
                 } else if (curr.viewOnceMessage?.message) {
                     curr = curr.viewOnceMessage.message;
                     foundVO = true;
@@ -170,10 +178,41 @@ export const mediaCommands = {
                 } else if (curr.viewOnceMessageV2Extension?.message) {
                     curr = curr.viewOnceMessageV2Extension.message;
                     foundVO = true;
-                } else if (curr.documentWithCaptionMessage?.message) {
-                    curr = curr.documentWithCaptionMessage.message;
                 } else {
                     break;
+                }
+            }
+
+            // Also check cache if quotedMessage alone was a stub or missing media
+            if ((!foundVO || (!curr?.imageMessage && !curr?.videoMessage && !curr?.audioMessage)) && context?.stanzaId) {
+                const cached = getCachedMessage(context.stanzaId);
+                if (cached) {
+                    let cachedCurr = cached.message || cached.raw;
+                    let cachedVO = false;
+                    while (cachedCurr) {
+                        if (cachedCurr.ephemeralMessage?.message) {
+                            cachedCurr = cachedCurr.ephemeralMessage.message;
+                        } else if (cachedCurr.deviceSentMessage?.message) {
+                            cachedCurr = cachedCurr.deviceSentMessage.message;
+                        } else if (cachedCurr.documentWithCaptionMessage?.message) {
+                            cachedCurr = cachedCurr.documentWithCaptionMessage.message;
+                        } else if (cachedCurr.viewOnceMessage?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessage.message;
+                            cachedVO = true;
+                        } else if (cachedCurr.viewOnceMessageV2?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessageV2.message;
+                            cachedVO = true;
+                        } else if (cachedCurr.viewOnceMessageV2Extension?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessageV2Extension.message;
+                            cachedVO = true;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (cachedVO && (cachedCurr?.imageMessage || cachedCurr?.videoMessage || cachedCurr?.audioMessage)) {
+                        curr = cachedCurr;
+                        foundVO = true;
+                    }
                 }
             }
 
@@ -182,7 +221,10 @@ export const mediaCommands = {
             }
 
             if (!foundVO || (!curr?.imageMessage && !curr?.videoMessage && !curr?.audioMessage)) {
-                return sock.sendMessage(jid, { text: '⚠️ The quoted message is not a View-Once message.' }, { quoted: msg });
+                return sock.sendMessage(jid, {
+                    text: '⚠️ The quoted message is not a View-Once message.',
+                    contextInfo: getBotAdReplyContext()
+                }, { quoted: msg });
             }
 
             const viewOnceContent = curr;

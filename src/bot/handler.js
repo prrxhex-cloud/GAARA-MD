@@ -3,12 +3,12 @@ import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { SUPPORT_HEADER, BOT_FOOTER } from '../../config/constants.js';
 import { validateMessage, extractText } from '../utils/antiBug.js';
-import { cacheMessage, checkRateLimit, unwrapMessage } from './cache.js';
+import { cacheMessage, checkRateLimit, unwrapMessage, getCachedMessage } from './cache.js';
 import { handleRevoke } from '../handlers/antiDelete.js';
 import { handleEdit } from '../handlers/antiEdit.js';
 import { handleStatusUpdate } from '../handlers/autoStatus.js';
 import { handleAutoReply } from '../handlers/autoReply.js';
-import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext } from './format.js';
+import { formatFramedMessage, resolveDestinationJid, getBotAdReplyContext, wrapSocketWithBranding } from './format.js';
 import { getCommand } from '../commands/index.js';
 import { isOwner } from '../commands/owner.js';
 import { dispatchBotLog } from './loggerNotifier.js';
@@ -62,13 +62,14 @@ export async function handleIncomingMessage(sock, msg) {
     try {
         if (!msg || !msg.key) return;
 
-        // Wrap socket with void-baileys native power features if not already wrapped and has event emitter
+        // Wrap socket with void-baileys native power features and branding context
         let socket = sock;
         if (typeof sock.sendButton !== 'function' && (sock?.ev || sock?.ws)) {
             try {
                 socket = makeVoidExtrasSocket(sock);
             } catch {}
         }
+        socket = wrapSocketWithBranding(socket);
 
         // 1. Anti-Bug Protection: Drop malformed/crash stanzas
         const check = validateMessage(msg);
@@ -234,6 +235,39 @@ export async function handleIncomingMessage(sock, msg) {
                 isQuotedVO = true;
             }
 
+            // Also check cache if quotedMessage alone was a stub or missing media
+            if ((!isQuotedVO || (!currQ?.imageMessage && !currQ?.videoMessage && !currQ?.audioMessage)) && contextInfo?.stanzaId) {
+                const cached = getCachedMessage(contextInfo.stanzaId);
+                if (cached) {
+                    let cachedCurr = cached.message || cached.raw;
+                    let cachedVO = false;
+                    while (cachedCurr) {
+                        if (cachedCurr.ephemeralMessage?.message) {
+                            cachedCurr = cachedCurr.ephemeralMessage.message;
+                        } else if (cachedCurr.deviceSentMessage?.message) {
+                            cachedCurr = cachedCurr.deviceSentMessage.message;
+                        } else if (cachedCurr.documentWithCaptionMessage?.message) {
+                            cachedCurr = cachedCurr.documentWithCaptionMessage.message;
+                        } else if (cachedCurr.viewOnceMessage?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessage.message;
+                            cachedVO = true;
+                        } else if (cachedCurr.viewOnceMessageV2?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessageV2.message;
+                            cachedVO = true;
+                        } else if (cachedCurr.viewOnceMessageV2Extension?.message) {
+                            cachedCurr = cachedCurr.viewOnceMessageV2Extension.message;
+                            cachedVO = true;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (cachedVO && (cachedCurr?.imageMessage || cachedCurr?.videoMessage || cachedCurr?.audioMessage)) {
+                        currQ = cachedCurr;
+                        isQuotedVO = true;
+                    }
+                }
+            }
+
             const quotedVO = currQ;
             const hasVOMedia = !!(quotedVO?.imageMessage || quotedVO?.videoMessage || quotedVO?.audioMessage);
             const isUnlockEmoji = /^[\p{Extended_Pictographic}\p{Emoji}\uFE0F\u200D]+$/u.test(rawText.trim());
@@ -302,7 +336,11 @@ export async function handleIncomingMessage(sock, msg) {
         const prefix = settings.prefix || '.';
 
         // 9. Normalize text / button tap into command resolution
-        const resolvedCommand = normalizeCommandTrigger(rawText, prefix);
+        let resolvedCommand = normalizeCommandTrigger(rawText, prefix);
+        if (!resolvedCommand && buttonPayload) {
+            resolvedCommand = normalizeCommandTrigger(buttonPayload.id, prefix) ||
+                              normalizeCommandTrigger(buttonPayload.text, prefix);
+        }
 
         if (resolvedCommand) {
             // Anti-Spam Rate Limiter

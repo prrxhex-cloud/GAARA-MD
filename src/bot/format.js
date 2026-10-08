@@ -26,8 +26,8 @@ export function getBotIconBuffer() {
  */
 export function getBotAdReplyContext(options = {}) {
     const settings = db.getSettings();
-    const botName = options.botName || settings.botName || 'GAARA X MD';
-    const footer = options.footer || settings.footerText || BOT_FOOTER;
+    const botName = options.title || options.botName || settings.botName || 'GAARA X MD';
+    const footer = options.body || options.footer || settings.footerText || BOT_FOOTER;
     const channelUrl = settings.channelUrl || DEFAULT_CHANNEL_URL;
     const thumbnail = getBotIconBuffer();
 
@@ -41,6 +41,34 @@ export function getBotAdReplyContext(options = {}) {
             renderLargerThumbnail: true
         }
     };
+}
+
+/**
+ * Wraps a Baileys or mock socket so that all outgoing sendMessage calls
+ * automatically embed the bot icon thumbnail and footer into externalAdReply context.
+ */
+export function wrapSocketWithBranding(sock) {
+    if (!sock || sock.__brandedWrapped) return sock;
+    const origSendMessage = typeof sock.sendMessage === 'function' ? sock.sendMessage.bind(sock) : null;
+    if (origSendMessage) {
+        sock.sendMessage = async function(jid, content, options = {}) {
+            try {
+                if (content && typeof content === 'object') {
+                    if (!content.react && !content.poll && !content.delete) {
+                        const adReply = getBotAdReplyContext();
+                        if (!content.contextInfo) {
+                            content.contextInfo = adReply;
+                        } else if (!content.contextInfo.externalAdReply) {
+                            content.contextInfo = { ...adReply, ...content.contextInfo, externalAdReply: adReply.externalAdReply };
+                        }
+                    }
+                }
+            } catch {}
+            return await origSendMessage(jid, content, options);
+        };
+    }
+    sock.__brandedWrapped = true;
+    return sock;
 }
 
 /**
@@ -200,6 +228,7 @@ export function formatConnectedSetupMessage(phoneNumber, panelPassword, dashboar
 export default {
     getBotIconBuffer,
     getBotAdReplyContext,
+    wrapSocketWithBranding,
     formatFramedMessage,
     resolveDestinationJid,
     formatConnectedSetupMessage
