@@ -231,6 +231,68 @@ describe('5. Express Server & Keepalive Endpoints', () => {
             server.close();
         }
     });
+
+    test('GET / serves complete 3D cyber landing page with real-time UI components', async () => {
+        const app = createServer();
+        const server = app.listen(0);
+        const port = server.address().port;
+
+        try {
+            const res = await fetch(`http://localhost:${port}/`);
+            assert.equal(res.status, 200);
+            assert.ok(res.headers.get('content-type')?.includes('text/html'));
+            const html = await res.text();
+            assert.ok(html.includes('GAARA X MD'));
+            assert.ok(html.includes('without limits'));
+            assert.ok(html.includes('bg-canvas'));
+            assert.ok(html.includes('hero3dCard'));
+            assert.ok(html.includes('landing.css'));
+            assert.ok(html.includes('landing.js'));
+            assert.ok(html.includes('Connect your WhatsApp'));
+            assert.ok(html.includes('Everything your bot needs'));
+        } finally {
+            server.close();
+        }
+    });
+
+    test('/api/status returns live dynamic command count and system metadata', async () => {
+        const app = createServer();
+        const server = app.listen(0);
+        const port = server.address().port;
+
+        try {
+            const res = await fetch(`http://localhost:${port}/api/status`);
+            assert.equal(res.status, 200);
+            const data = await res.json();
+            assert.equal(typeof data.commandCount, 'number');
+            assert.ok(data.commandCount >= 100);
+            assert.ok(Array.isArray(data.categories));
+            assert.ok(data.categories.length > 5);
+            assert.ok(typeof data.serverUptime === 'number');
+        } finally {
+            server.close();
+        }
+    });
+
+    test('static assets are served correctly via /assets/bot_icon.jpg and /css/landing.css', async () => {
+        const app = createServer();
+        const server = app.listen(0);
+        const port = server.address().port;
+
+        try {
+            const cssRes = await fetch(`http://localhost:${port}/css/landing.css`);
+            assert.equal(cssRes.status, 200);
+            const css = await cssRes.text();
+            assert.ok(css.includes('tilt-card'));
+
+            const imgRes = await fetch(`http://localhost:${port}/assets/bot_icon.jpg`);
+            assert.equal(imgRes.status, 200);
+            const buf = await imgRes.arrayBuffer();
+            assert.ok(buf.byteLength > 1000);
+        } finally {
+            server.close();
+        }
+    });
 });
 
 describe('6. Anti-Edit, Configurable Destinations & Multi-Cloud Tests', () => {

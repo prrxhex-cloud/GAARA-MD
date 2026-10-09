@@ -42,6 +42,7 @@ export function createServer() {
 
     // Serve public static frontend
     app.use(express.static(path.join(config.rootDir, 'public')));
+    app.use('/assets', express.static(path.join(config.rootDir, 'assets')));
 
     // Register routes
     setupRoutes(app);

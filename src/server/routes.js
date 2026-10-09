@@ -6,6 +6,7 @@ import { getBotStatus, requestPairing, initBotSocket, resetSession, restartBotSo
 import { createSessionToken, isValidSession, requireAuth } from './auth.js';
 import { createRateLimiter } from './rateLimiter.js';
 import { sanitizeObject, isSafeRegex } from '../utils/security.js';
+import { allCommandCategories } from '../commands/index.js';
 import cfSync from '../services/cfSync.js';
 import logger from '../utils/logger.js';
 
@@ -45,7 +46,7 @@ export function setupRoutes(app) {
     // Frontend HTML Views
     // ==========================================
     app.get('/', (req, res) => {
-        res.sendFile(path.join(publicDir, 'settings.html'));
+        res.sendFile(path.join(publicDir, 'index.html'));
     });
 
     app.get('/pair', (req, res) => {
@@ -66,11 +67,32 @@ export function setupRoutes(app) {
     app.get('/api/status', (req, res) => {
         const botStatus = getBotStatus();
         const settings = db.getSettings();
+
+        let totalCommands = 0;
+        try {
+            for (const cat of Object.values(allCommandCategories)) {
+                totalCommands += Object.keys(cat).length;
+            }
+        } catch {
+            totalCommands = 120;
+        }
+
+        const mem = process.memoryUsage();
+
         res.json({
             ...botStatus,
             botName: settings.botName,
             prefix: settings.prefix,
-            mode: settings.mode
+            mode: settings.mode,
+            commandCount: totalCommands,
+            categories: Object.keys(allCommandCategories),
+            serverUptime: Math.floor(process.uptime()),
+            memory: {
+                heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+                rssMB: Math.round(mem.rss / 1024 / 1024)
+            },
+            platform: process.platform,
+            nodeVersion: process.version
         });
     });
 

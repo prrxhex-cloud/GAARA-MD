@@ -4,7 +4,7 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://gaara-md-cf37.onrender.com/api/:path*" },
-    { "source": "/", "destination": "/settings.html" },
+    { "source": "/", "destination": "/index.html" },
     { "source": "/settings", "destination": "/settings.html" },
     { "source": "/pair", "destination": "/pair.html" },
     { "source": "/status", "destination": "/status.html" }
