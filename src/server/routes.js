@@ -97,6 +97,16 @@ export function setupRoutes(app) {
     });
 
     app.post('/api/pair', pairLimiter, async (req, res) => {
+        const status = getBotStatus();
+        // Privilege protection: An active connected bot cannot be hijacked or reset without authentication
+        if (status.connection === 'open') {
+            const authHeader = req.headers.authorization;
+            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
+            if (!isValidSession(token)) {
+                return res.status(403).json({ error: 'An active WhatsApp session is already connected. Please disconnect from the settings panel before pairing a new number.' });
+            }
+        }
+
         const { phone, frontendUrl } = req.body || {};
         if (!phone) {
             return res.status(400).json({ error: 'Phone number is required' });

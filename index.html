@@ -7,7 +7,6 @@
     <meta name="description" content="GAARA X MD by GAARA DEV OFC is an enterprise WhatsApp bot for fast AI commands, downloads, group tools, schedules, and live automation settings.">
     <meta name="theme-color" content="#070306">
     <link rel="icon" href="/assets/bot_icon.jpg" type="image/jpeg">
-    <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/landing.css">
 </head>
 <body>
@@ -52,9 +51,9 @@
             <section class="hero-section">
                 <div class="container hero-grid">
                     <div class="hero-content">
-                        <div id="heroPlatformBadge" class="platform-badge">
+                        <div id="heroPlatformBadge" class="platform-badge connecting-mode">
                             <span class="live-pulse"></span>
-                            <span id="heroBadgeText">PLATFORM OPERATIONAL</span>
+                            <span id="heroBadgeText">CHECKING PLATFORM...</span>
                         </div>
 
                         <h1 class="hero-headline">
@@ -79,8 +78,8 @@
                         <div class="hero-metrics-strip">
                             <div class="metric-card">
                                 <div class="metric-label">Active Status</div>
-                                <div id="metricStatus" class="metric-value live-green">
-                                    <span class="live-pulse" style="width:6px;height:6px;"></span> ONLINE
+                                <div id="metricStatus" class="metric-value live-pink">
+                                    <span class="live-pulse" style="width:6px;height:6px;"></span> CHECKING...
                                 </div>
                             </div>
                             <div class="metric-card">
@@ -196,10 +195,13 @@
                                 <div class="code-title">&#128272; YOUR WHATSAPP PAIRING CODE</div>
                                 <div id="codeDisplay" class="code-display">---- - ----</div>
                                 <div class="code-actions">
-                                    <button class="btn btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.85rem;" onclick="copyPairingCode()">&#128203; Copy Code</button>
+                                    <button type="button" id="copyCodeBtn" class="btn btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.85rem;" onclick="copyPairingCode()">&#128203; Copy Code</button>
                                 </div>
-                                <div class="countdown-bar-wrap">
-                                    <div id="countdownBar" class="countdown-bar"></div>
+                                <div class="countdown-timer-wrap">
+                                    <div id="countdownTimer" class="countdown-timer">Expires in <strong id="countdownSeconds">60</strong>s</div>
+                                    <div class="countdown-bar-wrap">
+                                        <div id="countdownBar" class="countdown-bar"></div>
+                                    </div>
                                 </div>
                                 <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.6rem;">
                                     Waiting for confirmation on your phone... Instant redirect upon linking!
@@ -413,7 +415,7 @@
                     <div class="footer-col">
                         <h4>Product</h4>
                         <ul class="footer-links">
-                            <li><a href="#pair">Pair Bot</a></li>
+                            <li><a href="#pair">Pair bot</a></li>
                             <li><a href="/settings">Settings</a></li>
                             <li><a href="/status">Status</a></li>
                         </ul>
@@ -424,15 +426,16 @@
                         <ul class="footer-links">
                             <li><a href="#about">About</a></li>
                             <li><a href="#features">Features</a></li>
-                            <li><a href="https://github.com/prrxhex-cloud/GAARA-MD" target="_blank" rel="noopener">GitHub</a></li>
+                            <li><a href="https://github.com/prrxhex-cloud/GAARA-MD" target="_blank" rel="noopener">Support</a></li>
                         </ul>
                     </div>
 
                     <div class="footer-col">
                         <h4>Legal</h4>
                         <ul class="footer-links">
-                            <li><a href="#about">Privacy Policy</a></li>
-                            <li><a href="#about">Terms of Service</a></li>
+                            <li><a href="#about">Privacy</a></li>
+                            <li><a href="#about">Terms</a></li>
+                            <li><a href="#about">Cookies</a></li>
                         </ul>
                     </div>
                 </div>

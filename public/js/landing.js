@@ -105,6 +105,15 @@
             targetRotX = -mouseY * 0.15;
         }, { passive: true });
 
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches && e.touches[0]) {
+                mouseX = (e.touches[0].clientX - width / 2) / (width / 2);
+                mouseY = (e.touches[0].clientY - height / 2) / (height / 2);
+                targetRotY = mouseX * 0.15;
+                targetRotX = -mouseY * 0.15;
+            }
+        }, { passive: true });
+
         const fov = 350;
 
         function renderParticles() {
@@ -159,15 +168,17 @@
                 ctx.fill();
             }
 
-            // Draw constellation lines
+            // Draw constellation lines (distSq check avoids redundant square roots)
             const maxDist = 120;
+            const maxDistSq = maxDist * maxDist;
             const len = projected.length;
             for (let i = 0; i < len; i++) {
                 for (let j = i + 1; j < len; j++) {
                     const dx = projected[i].x - projected[j].x;
                     const dy = projected[i].y - projected[j].y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < maxDist) {
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < maxDistSq) {
+                        const dist = Math.sqrt(distSq);
                         const lineAlpha = (1 - dist / maxDist) * 0.18 * projected[i].alpha;
                         ctx.beginPath();
                         ctx.moveTo(projected[i].x, projected[i].y);
@@ -190,31 +201,34 @@
     // =========================================================================
     function init3DTiltCards() {
         const heroCardWrapper = document.querySelector('.tilt-card-wrapper');
-        const heroCard = document.querySelector('.tilt-card');
         const glare = document.querySelector('.card-glare');
 
-        if (heroCardWrapper && heroCard) {
+        if (heroCardWrapper) {
             let bounds = null;
 
             function updateBounds() {
-                bounds = heroCard.getBoundingClientRect();
+                bounds = heroCardWrapper.getBoundingClientRect();
             }
 
-            heroCard.addEventListener('mouseenter', updateBounds, { passive: true });
+            heroCardWrapper.addEventListener('mouseenter', () => {
+                updateBounds();
+                heroCardWrapper.style.transition = 'transform 0.08s ease-out';
+            }, { passive: true });
+
             window.addEventListener('resize', updateBounds, { passive: true });
 
-            heroCard.addEventListener('mousemove', (e) => {
+            heroCardWrapper.addEventListener('mousemove', (e) => {
                 if (!bounds) updateBounds();
                 const mouseX = e.clientX - bounds.left;
                 const mouseY = e.clientY - bounds.top;
 
-                const normX = (mouseX / bounds.width) - 0.5;
-                const normY = (mouseY / bounds.height) - 0.5;
+                const normX = Math.max(-0.5, Math.min(0.5, (mouseX / bounds.width) - 0.5));
+                const normY = Math.max(-0.5, Math.min(0.5, (mouseY / bounds.height) - 0.5));
 
-                const rotX = -normY * 22;
-                const rotY = normX * 22;
+                const rotX = -normY * 20;
+                const rotY = normX * 20;
 
-                heroCardWrapper.style.transform = `perspective(1200px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
+                heroCardWrapper.style.transform = `perspective(1000px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
 
                 if (glare) {
                     const glareX = (normX + 0.5) * 100;
@@ -223,33 +237,36 @@
                 }
             }, { passive: true });
 
-            heroCard.addEventListener('mouseleave', () => {
-                heroCardWrapper.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+            heroCardWrapper.addEventListener('mouseleave', () => {
+                heroCardWrapper.style.transition = 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)';
+                heroCardWrapper.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
                 if (glare) {
                     glare.style.background = 'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0%, transparent 65%)';
                 }
             }, { passive: true });
         }
 
-        // Feature cards subtle 3D tilt
+        // Feature cards subtle 3D tilt with spring reset
         const featureCards = document.querySelectorAll('.feature-card-inner');
         featureCards.forEach((card) => {
             let fBounds = null;
 
             card.addEventListener('mouseenter', () => {
                 fBounds = card.getBoundingClientRect();
+                card.style.transition = 'transform 0.08s ease-out, border-color 0.3s ease, box-shadow 0.3s ease';
             }, { passive: true });
 
             card.addEventListener('mousemove', (e) => {
                 if (!fBounds) fBounds = card.getBoundingClientRect();
                 const mx = e.clientX - fBounds.left;
                 const my = e.clientY - fBounds.top;
-                const nx = (mx / fBounds.width) - 0.5;
-                const ny = (my / fBounds.height) - 0.5;
+                const nx = Math.max(-0.5, Math.min(0.5, (mx / fBounds.width) - 0.5));
+                const ny = Math.max(-0.5, Math.min(0.5, (my / fBounds.height) - 0.5));
                 card.style.transform = `perspective(800px) rotateX(${(-ny * 12).toFixed(1)}deg) rotateY(${(nx * 12).toFixed(1)}deg) translateY(-4px)`;
             }, { passive: true });
 
             card.addEventListener('mouseleave', () => {
+                card.style.transition = 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.3s ease, box-shadow 0.3s ease';
                 card.style.transform = 'perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0)';
             }, { passive: true });
         });
@@ -261,18 +278,19 @@
     let isPolling = false;
 
     function formatUptime(seconds) {
-        if (!seconds || seconds <= 0) return '0s';
-        const d = Math.floor(seconds / 86400);
-        const h = Math.floor((seconds % 86400) / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = Math.floor(seconds % 60);
+        const secNum = Math.floor(Number(seconds) || 0);
+        if (secNum <= 0) return '0s';
+        const d = Math.floor(secNum / 86400);
+        const h = Math.floor((secNum % 86400) / 3600);
+        const m = Math.floor((secNum % 3600) / 60);
+        const s = Math.floor(secNum % 60);
 
         const parts = [];
         if (d > 0) parts.push(`${d}d`);
         if (h > 0) parts.push(`${h}h`);
         if (m > 0) parts.push(`${m}m`);
-        if (parts.length === 0 || s > 0) parts.push(`${s}s`);
-        return parts.slice(0, 2).join(' ');
+        if (parts.length === 0 || (d === 0 && h === 0 && s > 0)) parts.push(`${s}s`);
+        return parts.slice(0, 2).join(' ') || `${secNum}s`;
     }
 
     async function pollRealTimeStatus() {
@@ -320,7 +338,7 @@
                 heroBadge.className = 'platform-badge';
                 heroBadgeText.textContent = 'PLATFORM OPERATIONAL';
             } else if (isConnecting) {
-                heroBadge.className = 'platform-badge';
+                heroBadge.className = 'platform-badge connecting-mode';
                 heroBadgeText.textContent = 'SOCKET CONNECTING...';
             } else {
                 heroBadge.className = 'platform-badge offline-mode';
@@ -343,26 +361,34 @@
 
         const metricUptime = document.getElementById('metricUptime');
         if (metricUptime) {
-            const sec = data.telemetry?.uptimeSeconds || data.serverUptime || 0;
-            metricUptime.textContent = isOnline ? formatUptime(sec) : `${pingMs}ms API`;
+            const uptimeSec = isOnline ? (data.telemetry?.uptimeSeconds || data.serverUptime || 0) : (data.serverUptime || 0);
+            metricUptime.textContent = uptimeSec > 0 ? formatUptime(uptimeSec) : (isOnline ? 'Active' : 'Standby');
         }
 
         // HUD Badges
         const hudStatusPill = document.getElementById('hudStatusPill');
         if (hudStatusPill) {
-            hudStatusPill.textContent = isOnline ? '• LIVE AUTOMATION' : '• READY TO LINK';
-            hudStatusPill.style.color = isOnline ? 'var(--neon-green)' : 'var(--neon-pink)';
+            hudStatusPill.textContent = isOnline ? '• LIVE AUTOMATION' : (isConnecting ? '• CONNECTING...' : '• READY TO LINK');
+            hudStatusPill.style.color = isOnline ? 'var(--neon-green)' : (isConnecting ? '#ffb703' : 'var(--neon-pink)');
         }
 
         // Pairing terminal server indicator
         const pairServerStatus = document.getElementById('pairServerStatus');
         if (pairServerStatus) {
-            pairServerStatus.innerHTML = `<span class="live-pulse" style="color: var(--neon-green);"></span> Server Live (${pingMs}ms)`;
+            if (isOnline) {
+                const phoneText = data.telemetry?.phoneNumber ? `+${data.telemetry.phoneNumber}` : 'Active';
+                pairServerStatus.innerHTML = `<span class="live-pulse" style="color: var(--neon-green);"></span> Linked (${phoneText})`;
+            } else {
+                pairServerStatus.innerHTML = `<span class="live-pulse" style="color: var(--neon-green);"></span> Server Live (${pingMs}ms)`;
+            }
         }
 
         // Detailed Telemetry Board
         const tSocket = document.getElementById('telemSocket');
-        if (tSocket) tSocket.textContent = data.connection?.toUpperCase() || 'UNKNOWN';
+        if (tSocket) {
+            tSocket.textContent = data.connection?.toUpperCase() || 'UNKNOWN';
+            tSocket.style.color = isOnline ? 'var(--neon-green)' : (isConnecting ? '#ffb703' : 'var(--neon-pink)');
+        }
 
         const tPhone = document.getElementById('telemPhone');
         if (tPhone) {
@@ -406,7 +432,7 @@
         const heroBadgeText = document.getElementById('heroBadgeText');
         if (heroBadge && heroBadgeText) {
             heroBadge.className = 'platform-badge offline-mode';
-            heroBadgeText.textContent = 'CONNECTING TO BACKEND...';
+            heroBadgeText.textContent = 'BACKEND OFFLINE';
         }
 
         const metricStatus = document.getElementById('metricStatus');
@@ -415,10 +441,30 @@
             metricStatus.className = 'metric-value live-pink';
         }
 
+        const metricUptime = document.getElementById('metricUptime');
+        if (metricUptime) {
+            metricUptime.textContent = 'Offline';
+        }
+
+        const hudStatusPill = document.getElementById('hudStatusPill');
+        if (hudStatusPill) {
+            hudStatusPill.textContent = '• BACKEND OFFLINE';
+            hudStatusPill.style.color = 'var(--neon-red)';
+        }
+
         const pairServerStatus = document.getElementById('pairServerStatus');
         if (pairServerStatus) {
-            pairServerStatus.innerHTML = `<span class="live-pulse" style="color: var(--neon-red);"></span> Backend Connecting...`;
+            pairServerStatus.innerHTML = `<span class="live-pulse" style="color: var(--neon-red);"></span> Backend Offline`;
         }
+
+        const tSocket = document.getElementById('telemSocket');
+        if (tSocket) {
+            tSocket.textContent = 'OFFLINE';
+            tSocket.style.color = 'var(--neon-red)';
+        }
+
+        const tPing = document.getElementById('telemPing');
+        if (tPing) tPing.textContent = 'Timeout';
     }
 
     // =========================================================================
@@ -439,6 +485,10 @@
         }
 
         const cleanPhone = phone.replace(/[^0-9]/g, '');
+        if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+            showToast('⚠️ Please enter country code without leading 0 (e.g. 9477... instead of 077...)', true);
+            return;
+        }
         if (cleanPhone.length < 8 || cleanPhone.length > 15) {
             showToast('Invalid phone number length. Must have 8-15 digits with country code.', true);
             return;
@@ -504,6 +554,7 @@
         const box = document.getElementById('pairResultBox');
         const codeDisplay = document.getElementById('codeDisplay');
         const countdownBar = document.getElementById('countdownBar');
+        const countdownSeconds = document.getElementById('countdownSeconds');
 
         if (!box || !codeDisplay) return;
 
@@ -518,33 +569,77 @@
         box.style.display = 'block';
         box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-        // 60-second countdown bar
+        // 60-second countdown with visual bar and numerical seconds
         if (countdownInterval) clearInterval(countdownInterval);
         let timeLeft = 60;
         if (countdownBar) countdownBar.style.width = '100%';
+        if (countdownSeconds) countdownSeconds.textContent = '60';
 
         countdownInterval = setInterval(() => {
             timeLeft--;
             if (countdownBar) {
                 countdownBar.style.width = `${(timeLeft / 60) * 100}%`;
             }
+            if (countdownSeconds) {
+                countdownSeconds.textContent = timeLeft;
+            }
             if (timeLeft <= 0) {
                 clearInterval(countdownInterval);
+                countdownInterval = null;
+                if (linkPollInterval) {
+                    clearInterval(linkPollInterval);
+                    linkPollInterval = null;
+                }
                 showToast('Pairing code expired. Please generate a fresh code.');
             }
         }, 1000);
     }
 
-    window.copyPairingCode = function () {
+    async function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch {}
+        }
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            const success = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return success;
+        } catch {
+            return false;
+        }
+    }
+
+    window.copyPairingCode = async function () {
         const codeDisplay = document.getElementById('codeDisplay');
         const raw = codeDisplay?.getAttribute('data-raw-code') || codeDisplay?.textContent?.replace(/\s/g, '');
         if (raw) {
-            navigator.clipboard.writeText(raw);
-            showToast('📋 Pairing code copied to clipboard!');
+            const ok = await copyToClipboard(raw);
+            if (ok) {
+                showToast('📋 Pairing code copied to clipboard!');
+            } else {
+                showToast('Could not copy automatically. Code: ' + raw);
+            }
         }
     };
 
     window.resetPairingSession = async function () {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (linkPollInterval) {
+            clearInterval(linkPollInterval);
+            linkPollInterval = null;
+        }
+
         const btn = document.getElementById('resetSessionBtn');
         if (btn) {
             btn.disabled = true;
@@ -582,7 +677,11 @@
                 const data = await res.json();
                 if (data.connection === 'open') {
                     clearInterval(linkPollInterval);
-                    if (countdownInterval) clearInterval(countdownInterval);
+                    linkPollInterval = null;
+                    if (countdownInterval) {
+                        clearInterval(countdownInterval);
+                        countdownInterval = null;
+                    }
                     showToast('🎉 WhatsApp Connected Successfully! Redirecting to dashboard...');
                     setTimeout(() => {
                         window.location.href = '/settings';
@@ -637,6 +736,16 @@
         const pairForm = document.getElementById('pairForm');
         if (pairForm) {
             pairForm.addEventListener('submit', handlePairSubmit);
+        }
+
+        const copyBtn = document.getElementById('copyCodeBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', window.copyPairingCode);
+        }
+
+        const resetBtn = document.getElementById('resetSessionBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', window.resetPairingSession);
         }
     });
 

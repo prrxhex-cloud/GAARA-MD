@@ -248,8 +248,13 @@ describe('5. Express Server & Keepalive Endpoints', () => {
             assert.ok(html.includes('hero3dCard'));
             assert.ok(html.includes('landing.css'));
             assert.ok(html.includes('landing.js'));
+            assert.ok(!html.includes('/css/style.css'), 'Landing page must not link to dashboard style.css to prevent layout conflict');
             assert.ok(html.includes('Connect your WhatsApp'));
+            assert.ok(html.includes('countdownTimer'));
+            assert.ok(html.includes('countdownSeconds'));
             assert.ok(html.includes('Everything your bot needs'));
+            assert.ok(html.includes('Support'));
+            assert.ok(html.includes('Cookies'));
         } finally {
             server.close();
         }
@@ -284,6 +289,9 @@ describe('5. Express Server & Keepalive Endpoints', () => {
             assert.equal(cssRes.status, 200);
             const css = await cssRes.text();
             assert.ok(css.includes('tilt-card'));
+            assert.ok(css.includes('.about-visual'));
+            assert.ok(css.includes('.countdown-timer'));
+            assert.ok(css.includes('@media (max-width: 520px)'));
 
             const imgRes = await fetch(`http://localhost:${port}/assets/bot_icon.jpg`);
             assert.equal(imgRes.status, 200);
