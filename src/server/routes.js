@@ -76,6 +76,22 @@ export function setupRoutes(app) {
         res.sendFile(path.join(publicDir, 'status.html'));
     });
 
+    app.get('/support', (req, res) => {
+        res.sendFile(path.join(publicDir, 'support.html'));
+    });
+
+    app.get('/privacy', (req, res) => {
+        res.sendFile(path.join(publicDir, 'privacy.html'));
+    });
+
+    app.get('/terms', (req, res) => {
+        res.sendFile(path.join(publicDir, 'terms.html'));
+    });
+
+    app.get('/cookies', (req, res) => {
+        res.sendFile(path.join(publicDir, 'cookies.html'));
+    });
+
     // ==========================================
     // Public Telemetry & Pairing API
     // ==========================================
@@ -86,7 +102,9 @@ export function setupRoutes(app) {
         let totalCommands = 0;
         try {
             for (const cat of Object.values(allCommandCategories)) {
-                totalCommands += Object.keys(cat).length;
+                for (const def of Object.values(cat)) {
+                    if (!def.hidden) totalCommands++;
+                }
             }
         } catch {
             totalCommands = 120;
@@ -117,16 +135,18 @@ export function setupRoutes(app) {
         const catalog = {};
         let total = 0;
         for (const [category, cmds] of Object.entries(allCommandCategories)) {
-            catalog[category] = Object.entries(cmds).map(([name, def]) => {
+            catalog[category] = [];
+            for (const [name, def] of Object.entries(cmds)) {
+                if (def.hidden) continue;
                 total++;
-                return {
+                catalog[category].push({
                     name,
                     description: def.description || 'Command handler',
                     usage: def.usage || `.${name}`,
                     aliases: def.aliases || [],
                     category
-                };
-            });
+                });
+            }
         }
         res.json({ total, categories: Object.keys(allCommandCategories), commands: catalog });
     });
@@ -161,14 +181,24 @@ export function setupRoutes(app) {
         }
     });
 
+    function isAuthorizedSessionRequest(req) {
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
+        if (isValidSession(token)) return true;
+
+        const passCandidate = req.headers['x-session-password'] || req.headers['x-panel-password'] || req.body?.password || req.body?.pin;
+        if (passCandidate && db.verifyAdminPassword(passCandidate)) {
+            return true;
+        }
+        return false;
+    }
+
     app.post('/api/pair', pairLimiter, async (req, res) => {
         const status = getBotStatus();
         // Privilege protection: An active connected bot cannot be hijacked or reset without authentication
         if (status.connection === 'open') {
-            const authHeader = req.headers.authorization;
-            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
-            if (!isValidSession(token)) {
-                return res.status(403).json({ error: 'An active WhatsApp session is already connected. Please disconnect from the settings panel before pairing a new number.' });
+            if (!isAuthorizedSessionRequest(req)) {
+                return res.status(403).json({ error: 'Active Session Detected: An active WhatsApp session is already connected. Only the session owner can cancel or pair a new bot.' });
             }
         }
 
@@ -206,9 +236,7 @@ export function setupRoutes(app) {
         const status = getBotStatus();
         // Privilege protection: Active connected bot cannot be reset without authentication
         if (status.connection === 'open') {
-            const authHeader = req.headers.authorization;
-            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
-            if (!isValidSession(token)) {
+            if (!isAuthorizedSessionRequest(req)) {
                 return res.status(403).json({ error: 'Active session cannot be reset without panel authentication.' });
             }
         }
@@ -228,9 +256,7 @@ export function setupRoutes(app) {
         const status = getBotStatus();
         // If bot is actively connected (open), strictly require panel authentication
         if (status.connection === 'open') {
-            const authHeader = req.headers.authorization;
-            const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-panel-token'];
-            if (!isValidSession(token)) {
+            if (!isAuthorizedSessionRequest(req)) {
                 return res.status(401).json({ error: 'Unauthorized. Panel authentication required to disconnect active bot.' });
             }
         }
@@ -249,12 +275,12 @@ export function setupRoutes(app) {
     // Authentication Endpoints (/api/login & /api/auth/login)
     // ==========================================
     const handleLoginRequest = (req, res) => {
-        const { password } = req.body || {};
+        const { password, phone } = req.body || {};
         if (!password || typeof password !== 'string') {
             return res.status(400).json({ error: 'Password required' });
         }
 
-        const valid = db.verifyAdminPassword(password);
+        const valid = db.verifyAdminPassword(password, phone);
         if (!valid) {
             return res.status(401).json({ error: 'Incorrect panel password' });
         }

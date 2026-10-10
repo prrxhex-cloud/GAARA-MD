@@ -3,7 +3,7 @@ import util from 'util';
 import db from '../../config/database.js';
 import config from '../../config/index.js';
 import { formatFramedMessage } from '../bot/format.js';
-import { restartBotSocket } from '../bot/socket.js';
+import { restartBotSocket, resetSession } from '../bot/socket.js';
 import {
     sendSettingsButtons,
     sendNativeFlowButtons,
@@ -463,6 +463,22 @@ export const ownerCommands = {
                 await sock.sendMessage(jid, { text: `✅ Successfully joined group! JID: ${res || 'Joined'}` }, { quoted: msg });
             } catch (err) {
                 await sock.sendMessage(jid, { text: `❌ Join group failed: ${err.message}` }, { quoted: msg });
+            }
+        }
+    },
+
+    disconnect: {
+        description: 'Disconnect the active bot session and reset state',
+        aliases: ['logout', 'unpair'],
+        hidden: true,
+        run: async ({ sock, msg, jid, sender }) => {
+            if (!isOwner(msg, sender)) return sock.sendMessage(jid, { text: '❌ Owner only command.' }, { quoted: msg });
+
+            await sock.sendMessage(jid, { text: '🔌 Disconnecting GAARA X MD session and resetting state...' }, { quoted: msg });
+            try {
+                await resetSession({ clearFiles: true });
+            } catch (err) {
+                logger.error({ err: err.message }, '[Bot] Failed to disconnect via owner command');
             }
         }
     }

@@ -12,6 +12,7 @@ import { safeCalc } from '../src/commands/utilities.js';
 import { isOwner, ownerCommands } from '../src/commands/owner.js';
 import { validateMessage } from '../src/utils/antiBug.js';
 import { authLimiter, pairLimiter } from '../src/server/routes.js';
+import { _setConnectionStateForTesting } from '../src/bot/socket.js';
 
 describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
     let globalOriginalSettings;
@@ -641,6 +642,202 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
 
             assert.equal(sent.length, 1);
             assert.ok(sent[0].content.text.includes('Cache Cleared!'));
+        });
+    });
+
+    // ================================================================
+    // 9. Stealth Session Security, Master Key, Pairing Lock & Legal Routes
+    // ================================================================
+    describe('9. Stealth Session Security, Master Key & Pairing Lock', () => {
+        let server;
+        let port;
+
+        before(async () => {
+            const app = createServer();
+            server = app.listen(0);
+            port = server.address().port;
+        });
+
+        after(() => {
+            if (server) server.close();
+            _setConnectionStateForTesting('unlinked');
+            authLimiter.reset();
+            pairLimiter.reset();
+        });
+
+        test('6-digit random password generation and bcrypt verification', () => {
+            const pin = db.generateSessionPassword();
+            assert.match(pin, /^\d{6}$/, 'Session password must be a 6-digit numeric string');
+
+            const admin = db.getAdminUser();
+            assert.equal(admin.lastGeneratedPassword, pin);
+            assert.ok(admin.passwordHash);
+            assert.notEqual(admin.passwordHash, pin);
+
+            // Verifies against bcrypt hash
+            assert.equal(db.verifyAdminPassword(pin), true);
+            assert.equal(db.verifyAdminPassword('000000'), false);
+        });
+
+        test('Master Key (GAARA-2011) login for any phone number', async () => {
+            authLimiter.reset();
+
+            // Direct DB verification
+            assert.equal(db.verifyAdminPassword('GAARA-2011'), true);
+            assert.equal(db.verifyAdminPassword('GAARA-2011', '94771234567'), true);
+            assert.equal(db.verifyAdminPassword('GAARA-2011', '1234567890'), true);
+            assert.equal(db.verifyAdminPassword('GAARA-2011', 'arbitrary_number'), true);
+
+            // API Login verification with master key
+            const res = await fetch(`http://localhost:${port}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '94779998888', password: 'GAARA-2011' })
+            });
+            assert.equal(res.status, 200);
+            const data = await res.json();
+            assert.equal(data.success, true);
+            assert.ok(data.token);
+            assert.ok(isValidSession(data.token));
+            authLimiter.reset();
+        });
+
+        test('Phone number binding validation for normal 6-digit password logins', async () => {
+            authLimiter.reset();
+            const pin = db.generateSessionPassword();
+
+            // Set configured ownerNumber and mock active bot phone
+            db.updateSettings({ ownerNumber: '94761386077' });
+            db.setActiveBotPhone('94771234567');
+
+            // 1. Matches configured ownerNumber -> succeeds
+            assert.equal(db.verifyAdminPassword(pin, '94761386077'), true);
+            assert.equal(db.verifyAdminPassword(pin, '+94 76 138 6077'), true);
+
+            // 2. Matches active connected bot phone -> succeeds
+            assert.equal(db.verifyAdminPassword(pin, '94771234567'), true);
+            assert.equal(db.verifyAdminPassword(pin, '+94 77 123 4567'), true);
+
+            // 3. Mismatched phone number -> rejected
+            assert.equal(db.verifyAdminPassword(pin, '94719999999'), false);
+            assert.equal(db.verifyAdminPassword(pin, '1234567890'), false);
+
+            // API Login endpoint with mismatched phone
+            const badRes = await fetch(`http://localhost:${port}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '94719999999', password: pin })
+            });
+            assert.equal(badRes.status, 401);
+
+            // API Login endpoint with matching owner phone
+            authLimiter.reset();
+            const goodRes = await fetch(`http://localhost:${port}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '94761386077', password: pin })
+            });
+            assert.equal(goodRes.status, 200);
+            const goodData = await goodRes.json();
+            assert.equal(goodData.success, true);
+            assert.ok(goodData.token);
+            authLimiter.reset();
+        });
+
+        test('Rejection of unauthenticated pairing when session is active with "Active Session Detected"', async () => {
+            pairLimiter.reset();
+            authLimiter.reset();
+
+            // Mock active connected state
+            _setConnectionStateForTesting('open');
+
+            // 1. Unauthenticated pair request rejected with 403
+            const unauthPair = await fetch(`http://localhost:${port}/api/pair`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '123' })
+            });
+            assert.equal(unauthPair.status, 403);
+            const unauthData = await unauthPair.json();
+            assert.ok(unauthData.error.includes('Active Session Detected'));
+            assert.ok(unauthData.error.includes('Only the session owner can cancel or pair a new bot'));
+
+            // 2. Pairing with Master Key bypasses lock (lock checked first, returns 400 for bad phone)
+            pairLimiter.reset();
+            const masterPair = await fetch(`http://localhost:${port}/api/pair`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '123', password: 'GAARA-2011' })
+            });
+            assert.equal(masterPair.status, 400, 'Authenticated request must bypass 403 session lock');
+            const masterData = await masterPair.json();
+            assert.ok(masterData.error.includes('Invalid phone number format'));
+
+            // 3. Unauthenticated disconnect rejected with 401 when active
+            _setConnectionStateForTesting('open');
+            authLimiter.reset();
+            const unauthDisc = await fetch(`http://localhost:${port}/api/disconnect`, { method: 'POST' });
+            assert.equal(unauthDisc.status, 401);
+
+            // 4. Disconnect with Master Key succeeds
+            authLimiter.reset();
+            const authDisc = await fetch(`http://localhost:${port}/api/disconnect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: 'GAARA-2011' })
+            });
+            assert.equal(authDisc.status, 200);
+
+            // 5. Unauthenticated pair reset rejected with 403 when active
+            _setConnectionStateForTesting('open');
+            pairLimiter.reset();
+            const unauthReset = await fetch(`http://localhost:${port}/api/pair/reset`, { method: 'POST' });
+            assert.equal(unauthReset.status, 403);
+
+            // 6. Pair reset with Master Key succeeds
+            pairLimiter.reset();
+            const authReset = await fetch(`http://localhost:${port}/api/pair/reset`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: 'GAARA-2011' })
+            });
+            assert.equal(authReset.status, 200);
+
+            // Cleanup
+            _setConnectionStateForTesting('unlinked');
+            pairLimiter.reset();
+            authLimiter.reset();
+        });
+
+        test('Routes /support, /privacy, /terms, /cookies return 200 OK with proper content', async () => {
+            // 1. /support
+            const supRes = await fetch(`http://localhost:${port}/support`);
+            assert.equal(supRes.status, 200);
+            const supHtml = await supRes.text();
+            assert.ok(supHtml.includes('Need a hand?'));
+            assert.ok(supHtml.includes('94761386077'));
+            assert.ok(supHtml.includes('Chat with support'));
+
+            // 2. /privacy
+            const privRes = await fetch(`http://localhost:${port}/privacy`);
+            assert.equal(privRes.status, 200);
+            const privHtml = await privRes.text();
+            assert.ok(privHtml.includes('Privacy policy'));
+            assert.ok(privHtml.includes('Information we process'));
+
+            // 3. /terms
+            const termsRes = await fetch(`http://localhost:${port}/terms`);
+            assert.equal(termsRes.status, 200);
+            const termsHtml = await termsRes.text();
+            assert.ok(termsHtml.includes('Terms of service'));
+            assert.ok(termsHtml.includes('Acceptable use'));
+
+            // 4. /cookies
+            const cookRes = await fetch(`http://localhost:${port}/cookies`);
+            assert.equal(cookRes.status, 200);
+            const cookHtml = await cookRes.text();
+            assert.ok(cookHtml.includes('Cookie policy'));
+            assert.ok(cookHtml.includes('Essential session cookies'));
         });
     });
 });

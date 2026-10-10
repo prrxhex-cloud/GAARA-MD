@@ -96,9 +96,25 @@ function initTabScrollSpy() {
 // Authentication Check & Login Modal
 // ----------------------------------------------------
 async function checkAuth() {
+    const loginView = document.getElementById('settingsLoginView');
+    const dashView = document.getElementById('settingsDashboardView');
     const overlay = document.getElementById('loginOverlay');
-    if (!token) {
+
+    const showLogin = () => {
+        if (loginView) loginView.style.display = 'block';
+        if (dashView) dashView.style.display = 'none';
         if (overlay) overlay.style.display = 'flex';
+    };
+
+    const showDashboard = () => {
+        if (loginView) loginView.style.display = 'none';
+        if (dashView) dashView.style.display = 'block';
+        if (overlay) overlay.style.display = 'none';
+        loadAllData();
+    };
+
+    if (!token) {
+        showLogin();
         return;
     }
 
@@ -108,40 +124,50 @@ async function checkAuth() {
         });
         const data = await res.json();
         if (!data.authenticated) {
-            if (overlay) overlay.style.display = 'flex';
+            showLogin();
         } else {
-            if (overlay) overlay.style.display = 'none';
-            loadAllData();
+            showDashboard();
         }
     } catch {
-        if (overlay) overlay.style.display = 'flex';
+        showLogin();
     }
 }
 
 async function handlePanelLogin(e) {
     e.preventDefault();
-    const password = document.getElementById('loginPasswordInput').value.trim();
+    const phoneInput = document.getElementById('loginPhoneInput');
+    const passInput = document.getElementById('loginPasswordInput');
     const errBox = document.getElementById('loginErrorMsg');
     const btn = document.getElementById('btnLogin');
 
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+    const password = passInput ? passInput.value.trim() : '';
+
     if (!password) return;
 
-    btn.disabled = true;
-    btn.textContent = 'Verifying...';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Verifying...';
+    }
     if (errBox) errBox.style.display = 'none';
 
     try {
-        const res = await fetch(apiUrl('/api/auth/login'), {
+        const res = await fetch(apiUrl('/api/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
+            body: JSON.stringify({ phone, password })
         });
 
         const data = await res.json();
         if (data.success && data.token) {
             token = data.token;
             localStorage.setItem('panel_token', token);
-            document.getElementById('loginOverlay').style.display = 'none';
+            const loginView = document.getElementById('settingsLoginView');
+            const dashView = document.getElementById('settingsDashboardView');
+            const overlay = document.getElementById('loginOverlay');
+            if (loginView) loginView.style.display = 'none';
+            if (dashView) dashView.style.display = 'block';
+            if (overlay) overlay.style.display = 'none';
             showToast('✅ Login successful!');
             loadAllData();
         } else {
@@ -156,8 +182,10 @@ async function handlePanelLogin(e) {
             errBox.style.display = 'block';
         }
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'Unlock Dashboard →';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Sign in securely →';
+        }
     }
 }
 

@@ -37,6 +37,9 @@ let botTelemetry = {
     battery: null
 };
 
+// Register getter with database for phone binding authentication
+db.registerBotPhoneGetter(() => botTelemetry.phoneNumber);
+
 export function getBotStatus() {
     const isOnline = connectionState === 'open';
     const isOfflineOrUnlinked = connectionState === 'unlinked' || connectionState === 'disconnected';
@@ -52,6 +55,10 @@ export function getBotStatus() {
             uptimeSeconds: botTelemetry.connectedAt ? Math.floor((Date.now() - botTelemetry.connectedAt) / 1000) : 0
         }
     };
+}
+
+export function _setConnectionStateForTesting(state) {
+    connectionState = state;
 }
 
 export function getSocket() {
@@ -113,6 +120,7 @@ export async function resetSession({ clearFiles = true } = {}) {
         botTelemetry.connectedAt = null;
         botTelemetry.phoneNumber = null;
         lastSetupSentPhone = null;
+        db.setActiveBotPhone(null);
 
         logger.info('[Bot] Session successfully reset to unlinked state');
         return true;
@@ -216,6 +224,10 @@ export async function initBotSocket() {
                 const myJid = sock.user?.id ? (sock.parseJid ? sock.parseJid(sock.user.id) : sock.user.id.split(':')[0] + '@s.whatsapp.net') : null;
                 const phone = myJid ? myJid.split('@')[0] : 'Unknown';
                 botTelemetry.phoneNumber = phone;
+                db.setActiveBotPhone(phone);
+
+                // Dynamic 6-Digit Password Rotation: generate fresh unique 6-digit password every time
+                const sessionPin = db.generateSessionPassword();
 
                 logger.info({ phone }, '[Bot] GAARA X MD Connected Successfully!');
 
@@ -236,7 +248,7 @@ export async function initBotSocket() {
 
                 // Send Single Consolidated Connected Setup Message to 'Message Yourself'
                 // (Suppresses redundant 'SETTINGS UPDATED' and 'SYSTEM LOG // ONLINE' messages)
-                await sendInitialSetupMessage(sock, phone, myJid);
+                await sendInitialSetupMessage(sock, phone, myJid, sessionPin);
             }
 
             if (connection === 'close') {
@@ -249,6 +261,8 @@ export async function initBotSocket() {
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
 
                 logger.warn({ statusCode, isLoggedOut }, '[Bot] Connection closed');
+
+                db.setActiveBotPhone(null);
 
                 if (isLoggedOut) {
                     connectionState = 'unlinked';
@@ -400,7 +414,7 @@ export async function requestPairing(phoneNumber, { frontendUrl } = {}) {
 /**
  * Sends initial connected setup message to 'Message Yourself'.
  */
-async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
+async function sendInitialSetupMessage(sock, phoneNumber, selfJid, activePin = null) {
     try {
         if (!selfJid) return;
 
@@ -412,7 +426,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid) {
             return;
         }
 
-        const panelPass = admin?.lastGeneratedPassword || '(Configured in panel / .env)';
+        const panelPass = activePin || admin?.lastGeneratedPassword || '(Configured in panel / .env)';
 
         // Discover best public Dashboard URL
         let dashboardUrl = settings.lastKnownDashboardUrl || config.appUrl;

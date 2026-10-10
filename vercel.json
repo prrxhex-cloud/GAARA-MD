@@ -11,7 +11,11 @@
     { "source": "/reviews", "destination": "/reviews.html" },
     { "source": "/settings", "destination": "/settings.html" },
     { "source": "/pair", "destination": "/pair.html" },
-    { "source": "/status", "destination": "/status.html" }
+    { "source": "/status", "destination": "/status.html" },
+    { "source": "/support", "destination": "/support.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/cookies", "destination": "/cookies.html" }
   ],
   "headers": [
     {
