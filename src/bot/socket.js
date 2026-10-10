@@ -28,6 +28,7 @@ let currentPairingCode = null;
 let connectionState = 'connecting'; // 'disconnected' | 'connecting' | 'open' | 'unlinked'
 let isInitialSync = false;
 let lastSetupSentPhone = null;
+let lastSetupSentPin = null;
 let botTelemetry = {
     connectedAt: null,
     phoneNumber: null,
@@ -120,6 +121,7 @@ export async function resetSession({ clearFiles = true } = {}) {
         botTelemetry.connectedAt = null;
         botTelemetry.phoneNumber = null;
         lastSetupSentPhone = null;
+        lastSetupSentPin = null;
         db.setActiveBotPhone(null);
 
         logger.info('[Bot] Session successfully reset to unlinked state');
@@ -263,6 +265,8 @@ export async function initBotSocket() {
                 logger.warn({ statusCode, isLoggedOut }, '[Bot] Connection closed');
 
                 db.setActiveBotPhone(null);
+                lastSetupSentPhone = null;
+                lastSetupSentPin = null;
 
                 if (isLoggedOut) {
                     connectionState = 'unlinked';
@@ -421,8 +425,11 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid, activePin = n
         const admin = db.getAdminUser();
         const settings = db.getSettings();
 
-        // Check if already sent for this phone number
-        if (lastSetupSentPhone === phoneNumber) {
+        // Check if already sent for this exact session PIN
+        if (activePin && lastSetupSentPin === activePin) {
+            return;
+        }
+        if (!activePin && lastSetupSentPhone === phoneNumber) {
             return;
         }
 
@@ -458,6 +465,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid, activePin = n
                     contextInfo: adReply
                 });
                 lastSetupSentPhone = phoneNumber;
+                lastSetupSentPin = activePin || panelPass;
                 return;
             } catch (btnErr) {
                 logger.warn({ err: btnErr.message }, '[Bot] Failed sending setup message with buttons, falling back to text');
@@ -469,6 +477,7 @@ async function sendInitialSetupMessage(sock, phoneNumber, selfJid, activePin = n
             contextInfo: adReply
         });
         lastSetupSentPhone = phoneNumber;
+        lastSetupSentPin = activePin || panelPass;
     } catch (err) {
         logger.error({ err: err.message }, '[Bot] Error sending initial setup message');
     }

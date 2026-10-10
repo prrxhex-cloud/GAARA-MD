@@ -710,16 +710,22 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
             db.updateSettings({ ownerNumber: '94761386077' });
             db.setActiveBotPhone('94771234567');
 
-            // 1. Matches configured ownerNumber -> succeeds
+            // 1. Matches configured ownerNumber -> succeeds (including national 0-prefix and 00-prefix)
             assert.equal(db.verifyAdminPassword(pin, '94761386077'), true);
             assert.equal(db.verifyAdminPassword(pin, '+94 76 138 6077'), true);
+            assert.equal(db.verifyAdminPassword(pin, '0094761386077'), true);
+            assert.equal(db.verifyAdminPassword(pin, '0761386077'), true);
+            assert.equal(db.verifyAdminPassword(' ' + pin + ' ', '0761386077'), true, 'Whitespace-padded PIN should verify');
 
-            // 2. Matches active connected bot phone -> succeeds
+            // 2. Matches active connected bot phone -> succeeds (including national 0-prefix and 00-prefix)
             assert.equal(db.verifyAdminPassword(pin, '94771234567'), true);
             assert.equal(db.verifyAdminPassword(pin, '+94 77 123 4567'), true);
+            assert.equal(db.verifyAdminPassword(pin, '0094771234567'), true);
+            assert.equal(db.verifyAdminPassword(pin, '0771234567'), true);
 
             // 3. Mismatched phone number -> rejected
             assert.equal(db.verifyAdminPassword(pin, '94719999999'), false);
+            assert.equal(db.verifyAdminPassword(pin, '0719999999'), false);
             assert.equal(db.verifyAdminPassword(pin, '1234567890'), false);
 
             // API Login endpoint with mismatched phone
@@ -730,7 +736,19 @@ describe('GAARA X MD - Multi-Layer Security & Vulnerability Test Suite', () => {
             });
             assert.equal(badRes.status, 401);
 
-            // API Login endpoint with matching owner phone
+            // API Login endpoint with national format phone (0761386077)
+            authLimiter.reset();
+            const natRes = await fetch(`http://localhost:${port}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: '0761386077', password: pin })
+            });
+            assert.equal(natRes.status, 200);
+            const natData = await natRes.json();
+            assert.equal(natData.success, true);
+            assert.ok(natData.token);
+
+            // API Login endpoint with matching international owner phone
             authLimiter.reset();
             const goodRes = await fetch(`http://localhost:${port}/api/login`, {
                 method: 'POST',

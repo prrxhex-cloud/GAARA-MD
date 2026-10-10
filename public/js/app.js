@@ -133,6 +133,19 @@ async function checkAuth() {
     }
 }
 
+function togglePasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (btn) btn.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        if (btn) btn.textContent = '👁️';
+    }
+}
+window.togglePasswordVisibility = togglePasswordVisibility;
+
 async function handlePanelLogin(e) {
     e.preventDefault();
     const phoneInput = document.getElementById('loginPhoneInput');
@@ -143,7 +156,13 @@ async function handlePanelLogin(e) {
     const phone = phoneInput ? phoneInput.value.trim() : '';
     const password = passInput ? passInput.value.trim() : '';
 
-    if (!password) return;
+    if (!password) {
+        if (errBox) {
+            errBox.textContent = 'Password is required';
+            errBox.style.display = 'block';
+        }
+        return;
+    }
 
     if (btn) {
         btn.disabled = true;

