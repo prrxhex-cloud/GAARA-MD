@@ -3,161 +3,439 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAARA X MD — Link WhatsApp</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <title>Pair WhatsApp Bot | GAARA X MD</title>
+    <meta name="description" content="Link your WhatsApp number in under 30 seconds using official 8-digit Baileys code pairing.">
+    <meta name="theme-color" content="#070306">
+    <link rel="icon" href="/assets/bot_icon.jpg" type="image/jpeg">
+    <link rel="stylesheet" href="/css/portal.css">
     <style>
-        .pair-card {
-            max-width: 650px;
-            margin: 2rem auto;
-            text-align: center;
-        }
-        .code-box {
-            background: rgba(10, 2, 6, 0.9);
+        .code-display-box {
+            background: #140b12;
             border: 2px dashed var(--neon-red);
-            padding: 1.5rem;
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
+            padding: 1.75rem;
             margin: 1.5rem 0;
-            display: inline-block;
-            box-shadow: 0 0 25px rgba(255, 42, 95, 0.3);
+            text-align: center;
+            box-shadow: 0 0 30px rgba(255, 42, 95, 0.25);
         }
-        .code-text {
-            font-size: 2.4rem;
-            letter-spacing: 6px;
+        .code-display-text {
+            font-size: 2.75rem;
             font-weight: 900;
-            color: #fff;
-            text-shadow: 0 0 12px var(--neon-red);
-            font-family: monospace;
+            letter-spacing: 8px;
+            color: #ffffff;
+            text-shadow: 0 0 15px var(--neon-red);
+            font-family: var(--font-mono);
+        }
+        .timer-progress-wrap {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .timer-progress-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--neon-red), #ff6b8b);
+            transition: width 1s linear;
         }
         .steps-container {
-            text-align: left;
-            margin: 2rem 0;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.25rem;
+            margin-bottom: 2.5rem;
+        }
+        .step-tile {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
         }
-        .step-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            margin-bottom: 1.2rem;
-        }
-        .step-item:last-child {
-            margin-bottom: 0;
-        }
-        .step-num {
-            background: var(--neon-red);
-            color: #fff;
+        .step-tile-num {
+            color: var(--neon-red);
+            font-size: 0.75rem;
             font-weight: 800;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            font-size: 0.9rem;
+            font-family: var(--font-mono);
+            margin-bottom: 0.5rem;
         }
-        .step-text strong {
+        .step-tile-title {
+            font-size: 1.05rem;
+            font-weight: 700;
             color: #fff;
+            margin-bottom: 0.4rem;
         }
-        .step-text p {
+        .step-tile-desc {
+            font-size: 0.85rem;
             color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-top: 0.2rem;
+            line-height: 1.5;
+        }
+        @media (max-width: 768px) {
+            .steps-container {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="logo-container">
-            <div class="logo-badge">⚡ GAARA</div>
-            <div class="brand-title">GAARA X MD PANEL</div>
-        </div>
-        <nav>
-            <a href="/pair" class="active">📲 Link Device</a>
-            <a href="/settings">⚙️ Settings</a>
-            <a href="/status">📊 Status</a>
-            <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" title="Configure Backend API URL for Vercel">🌐 Server URL</button>
-        </nav>
-    </header>
+    <div class="ambient-glow-top"></div>
+    <div class="ambient-glow-bottom"></div>
 
-    <main>
-        <div class="card pair-card">
-            <h1 class="card-title" style="font-size: 1.8rem; justify-content: center;">
-                📲 Link Your WhatsApp Account
-            </h1>
-            <p class="card-desc">
-                Fast, secure pairing using WhatsApp official 8-digit Pairing Code. No QR scanner needed.
-            </p>
+    <div class="page-wrapper">
+        <!-- Floating Capsule Navbar -->
+        <header class="site-header">
+            <div class="container">
+                <div class="nav-capsule">
+                    <a href="/" class="brand-badge">
+                        <img src="/assets/bot_icon.jpg" alt="GAARA Logo" class="brand-avatar">
+                        <div class="brand-text-wrap">
+                            <span class="brand-title">GAARA X MD</span>
+                            <span class="brand-subtitle">OFFICIAL AUTOMATION</span>
+                        </div>
+                    </a>
 
-            <div class="steps-container">
-                <div class="step-item">
-                    <div class="step-num">1</div>
-                    <div class="step-text">
-                        <strong>Open WhatsApp on your Phone</strong>
-                        <p>Go to Settings ➔ Linked Devices ➔ Link a Device.</p>
-                    </div>
-                </div>
-                <div class="step-item">
-                    <div class="step-num">2</div>
-                    <div class="step-text">
-                        <strong>Choose Phone Number Linking</strong>
-                        <p>Tap "Link with phone number instead" at the bottom of the QR scanner.</p>
-                    </div>
-                </div>
-                <div class="step-item">
-                    <div class="step-num">3</div>
-                    <div class="step-text">
-                        <strong>Enter the Code</strong>
-                        <p>Generate your code below, enter it into WhatsApp, and confirm linking.</p>
+                    <nav class="nav-links" id="mainNav">
+                        <a href="/about" class="nav-link">About</a>
+                        <a href="/reviews" class="nav-link">Reviews</a>
+                        <a href="/status" class="nav-link">Status</a>
+                        <a href="/settings" class="nav-link">Settings</a>
+                    </nav>
+
+                    <div class="nav-actions">
+                        <a href="/pair" class="btn-pair-pill" style="background: var(--neon-red); color: #fff;">Pair bot &rarr;</a>
+                        <button class="mobile-toggle-btn" onclick="toggleNav()" aria-label="Toggle menu">&#9776;</button>
                     </div>
                 </div>
             </div>
+        </header>
 
-            <div class="input-group" style="text-align: left; max-width: 420px; margin: 0 auto 1.5rem auto;">
-                <label class="input-label">WhatsApp Phone Number (with Country Code):</label>
-                <input type="text" id="phoneNumberInput" placeholder="e.g. 94771234567 or 15551234567" style="font-size: 1.1rem; text-align: center;">
-            </div>
-
-            <div style="display: flex; gap: 0.75rem; justify-content: center; align-items: center; flex-wrap: wrap;">
-                <button class="btn" id="getPairBtn" onclick="requestPairCode()" style="font-size: 1.05rem; padding: 0.9rem 2rem;">
-                    ⚡ GET PAIRING CODE
-                </button>
-                <button class="btn btn-secondary" id="resetSessionBtn" onclick="resetPairingSession()" style="font-size: 0.9rem; padding: 0.9rem 1.2rem;" title="Clear stale session credentials if reconnecting or stuck">
-                    🔄 Reset Session
-                </button>
-            </div>
-
-            <div id="codeResultContainer" style="display: none; margin-top: 2rem;">
-                <p style="color: var(--text-secondary); font-size: 0.95rem;">Enter this code on your WhatsApp phone:</p>
-                <div class="code-box">
-                    <div class="code-text" id="codeValue">----</div>
-                </div>
-                <div>
-                    <button class="btn btn-secondary" onclick="copyPairingCode()">
-                        📋 COPY PAIRING CODE
-                    </button>
-                </div>
-                <p style="color: var(--warning); font-size: 0.85rem; margin-top: 1rem;">
-                    ⏳ Code expires in 60 seconds. Waiting for connection...
+        <!-- Main Content -->
+        <main class="container">
+            <!-- Header Section -->
+            <div class="page-intro">
+                <span class="section-kicker">DEVICE PAIRING PORTAL</span>
+                <h1 class="page-headline">One code. Instant connection.</h1>
+                <p class="page-subtext">
+                    Link your WhatsApp account in under 30 seconds using the official 8-digit Baileys code protocol. Zero QR scanning required.
                 </p>
             </div>
 
-            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.85rem; color: var(--text-secondary);">
-                <span>🌐 Backend Server: </span>
-                <span id="currentApiDisplay" style="color: var(--neon-cyan); font-family: monospace;">(Same origin / default)</span>
-                <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; margin-left: 0.5rem;">Change</button>
+            <!-- 3-Step Walkthrough -->
+            <div class="steps-container">
+                <div class="step-tile">
+                    <div class="step-tile-num">STEP 01</div>
+                    <div class="step-tile-title">Generate Code</div>
+                    <p class="step-tile-desc">Enter your international phone number with country code below (e.g. 9477... or 1555...) and request your pairing key.</p>
+                </div>
+
+                <div class="step-tile">
+                    <div class="step-tile-num">STEP 02</div>
+                    <div class="step-tile-title">Open WhatsApp</div>
+                    <p class="step-tile-desc">On your phone, go to Settings &gt; Linked Devices &gt; Link a Device, then tap "Link with phone number instead".</p>
+                </div>
+
+                <div class="step-tile">
+                    <div class="step-tile-num">STEP 03</div>
+                    <div class="step-tile-title">Confirm Link</div>
+                    <p class="step-tile-desc">Enter the 8-character code shown on screen into your phone before the 60-second timer expires.</p>
+                </div>
             </div>
-        </div>
-    </main>
 
-    <div id="toast"></div>
+            <!-- Main Pairing Console Card -->
+            <div class="card-section" style="max-width: 720px; margin: 0 auto 4rem auto;">
+                <div class="card-header-row">
+                    <div>
+                        <h2 class="card-title">Link WhatsApp Account</h2>
+                        <p class="card-desc">End-to-end encrypted session stored on your private server.</p>
+                    </div>
+                    <span class="badge-pill green" id="backendBadge">BACKEND CONNECTED</span>
+                </div>
 
-    <footer>
-        GAARA X MD &bull; Built by GAARA DEV OFC &bull; Pure ESM
-    </footer>
+                <!-- Backend Server Selector -->
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label">Backend API Server</label>
+                    <div style="display: flex; gap: 0.75rem;">
+                        <select id="serverSelect" class="form-select" onchange="handleServerChange()">
+                            <option value="">Auto (Current Domain / Default)</option>
+                            <option value="https://gaara-md-cf37.onrender.com">Render Cloud Backend (gaara-md-cf37)</option>
+                            <option value="custom">Custom Server URL...</option>
+                        </select>
+                        <input type="text" id="customServerInput" class="form-input" placeholder="https://your-backend.com" style="display: none;" onchange="handleCustomServerChange()">
+                    </div>
+                </div>
 
-    <script src="/js/pair.js"></script>
+                <!-- Phone Number Form -->
+                <form id="pairForm" onsubmit="handleRequestCode(event)">
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label class="form-label" for="phoneInput">WhatsApp Phone Number (with Country Code)</label>
+                        <input type="tel" id="phoneInput" class="form-input" placeholder="e.g. 94771234567 or 15551234567" required style="font-size: 1.15rem; font-family: var(--font-mono); text-align: center; letter-spacing: 2px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Do not include '+' or spaces (digits only).</span>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button type="submit" id="btnGetCode" class="btn-primary" style="flex: 2; padding: 0.9rem;">
+                            ⚡ GET PAIRING CODE &rarr;
+                        </button>
+                        <button type="button" onclick="handleResetSession()" class="btn-dark" style="flex: 1; padding: 0.9rem;" title="Reset stale pairing session if stuck">
+                            🔄 Reset Session
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Code Result Box & 60s Countdown Timer -->
+                <div id="codeResultArea" style="display: none; margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1.75rem;">
+                    <div style="text-align: center;">
+                        <span class="section-kicker" style="color: var(--neon-cyan);">OFFICIAL PAIRING KEY</span>
+                        <div class="code-display-box">
+                            <div class="code-display-text" id="pairingCodeText">----</div>
+                        </div>
+
+                        <div style="display: flex; justify-content: center; gap: 1rem;">
+                            <button class="btn-primary" onclick="copyCode()" id="btnCopyCode" style="padding: 0.65rem 1.25rem;">
+                                📋 Copy Code
+                            </button>
+                        </div>
+
+                        <!-- Real 60-Second Countdown Timer -->
+                        <div style="margin-top: 1.5rem; text-align: left;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+                                <span>Code validity</span>
+                                <span id="countdownLabel" style="font-weight: 700; color: var(--neon-amber);">Expires in 60s</span>
+                            </div>
+                            <div class="timer-progress-wrap">
+                                <div class="timer-progress-bar" id="timerBar"></div>
+                            </div>
+                        </div>
+
+                        <p id="socketWaitMessage" style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 1rem;">
+                            <span class="status-dot"></span> Waiting for confirmation on your phone...
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Official Footer -->
+        <footer class="site-footer">
+            <div class="container">
+                <div class="footer-top-grid">
+                    <div class="footer-brand-box">
+                        <div class="footer-brand-pill">GXM</div>
+                        <div>
+                            <div class="footer-brand-title">GAARA X MD</div>
+                            <p class="footer-brand-bio">Powerful WhatsApp automation, designed for speed.</p>
+                        </div>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Product</div>
+                        <a href="/pair" class="footer-col-link">Pair bot</a>
+                        <a href="/settings" class="footer-col-link">Settings</a>
+                        <a href="/status" class="footer-col-link">Status</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Company</div>
+                        <a href="/about" class="footer-col-link">About</a>
+                        <a href="/reviews" class="footer-col-link">Reviews</a>
+                        <a href="https://whatsapp.com/channel/gaaraxmd" target="_blank" rel="noopener" class="footer-col-link">Support</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Legal</div>
+                        <a href="#" class="footer-col-link">Privacy</a>
+                        <a href="#" class="footer-col-link">Terms</a>
+                        <a href="#" class="footer-col-link">Cookies</a>
+                    </div>
+                </div>
+
+                <div class="footer-bottom-row">
+                    <div>&copy; 2026 GAARA DEV OFC</div>
+                    <div>Built in Sri Lanka</div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        let countdownTimer = null;
+        let countdownSec = 60;
+        let pollInterval = null;
+
+        function toggleNav() {
+            const nav = document.getElementById('mainNav');
+            nav.classList.toggle('mobile-open');
+        }
+
+        function getApiBase() {
+            const stored = localStorage.getItem('api_base_url');
+            if (stored) return stored.replace(/\/+$/, '');
+            return '';
+        }
+
+        function setApiBase(url) {
+            if (url) {
+                localStorage.setItem('api_base_url', url.replace(/\/+$/, ''));
+            } else {
+                localStorage.removeItem('api_base_url');
+            }
+        }
+
+        function handleServerChange() {
+            const select = document.getElementById('serverSelect');
+            const customInput = document.getElementById('customServerInput');
+            if (select.value === 'custom') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                setApiBase(select.value);
+            }
+        }
+
+        function handleCustomServerChange() {
+            const customInput = document.getElementById('customServerInput');
+            setApiBase(customInput.value.trim());
+        }
+
+        function initServerSelector() {
+            const current = getApiBase();
+            const select = document.getElementById('serverSelect');
+            const customInput = document.getElementById('customServerInput');
+            if (!current) {
+                select.value = '';
+            } else if (current === 'https://gaara-md-cf37.onrender.com') {
+                select.value = 'https://gaara-md-cf37.onrender.com';
+            } else {
+                select.value = 'custom';
+                customInput.style.display = 'block';
+                customInput.value = current;
+            }
+        }
+
+        async function handleRequestCode(e) {
+            e.preventDefault();
+            const phoneInput = document.getElementById('phoneInput');
+            const cleanPhone = phoneInput.value.replace(/[^0-9]/g, '');
+            if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
+                alert('Please enter a valid phone number with country code (8 to 15 digits).');
+                return;
+            }
+
+            const btn = document.getElementById('btnGetCode');
+            btn.disabled = true;
+            btn.textContent = 'Requesting code...';
+
+            const base = getApiBase();
+            const endpoint = `${base}/api/pair`;
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: cleanPhone })
+                });
+
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    throw new Error(data.error || 'Failed to request pairing code');
+                }
+
+                // Show Code
+                document.getElementById('codeResultArea').style.display = 'block';
+                document.getElementById('pairingCodeText').textContent = data.code || '--------';
+
+                startCountdown(60);
+                startSocketPolling();
+
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '⚡ GET PAIRING CODE →';
+            }
+        }
+
+        function startCountdown(duration) {
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownSec = duration;
+
+            const label = document.getElementById('countdownLabel');
+            const bar = document.getElementById('timerBar');
+
+            label.textContent = `Expires in ${countdownSec}s`;
+            bar.style.width = '100%';
+
+            countdownTimer = setInterval(() => {
+                countdownSec--;
+                if (countdownSec <= 0) {
+                    clearInterval(countdownTimer);
+                    label.textContent = 'Code expired. Request a new one.';
+                    label.style.color = 'var(--neon-red)';
+                    bar.style.width = '0%';
+                    document.getElementById('pairingCodeText').textContent = 'EXPIRED';
+                } else {
+                    label.textContent = `Expires in ${countdownSec}s`;
+                    const pct = (countdownSec / duration) * 100;
+                    bar.style.width = `${pct}%`;
+                }
+            }, 1000);
+        }
+
+        function startSocketPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            const base = getApiBase();
+
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${base}/api/status`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.connection === 'open') {
+                            clearInterval(pollInterval);
+                            clearInterval(countdownTimer);
+                            document.getElementById('socketWaitMessage').innerHTML = '🎉 <strong>Connected successfully!</strong> Redirecting to settings...';
+                            document.getElementById('socketWaitMessage').style.color = 'var(--neon-green)';
+                            setTimeout(() => {
+                                window.location.href = '/settings';
+                            }, 2000);
+                        }
+                    }
+                } catch {}
+            }, 2500);
+        }
+
+        async function handleResetSession() {
+            if (!confirm('Are you sure you want to reset the current session? Stale pairing files will be cleared.')) return;
+            const base = getApiBase();
+            try {
+                const res = await fetch(`${base}/api/pair/reset`, { method: 'POST' });
+                const json = await res.json();
+                if (res.ok && json.success) {
+                    alert('Session reset successfully. You can now request a fresh pairing code.');
+                    document.getElementById('codeResultArea').style.display = 'none';
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    if (pollInterval) clearInterval(pollInterval);
+                } else {
+                    alert(json.error || 'Failed to reset session');
+                }
+            } catch (err) {
+                alert('Connection error: ' + err.message);
+            }
+        }
+
+        function copyCode() {
+            const code = document.getElementById('pairingCodeText').textContent;
+            if (!code || code === '----' || code === 'EXPIRED') return;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = document.getElementById('btnCopyCode');
+                const orig = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => { btn.textContent = orig; }, 2000);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initServerSelector);
+    </script>
 </body>
 </html>

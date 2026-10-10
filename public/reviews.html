@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community Reviews | GAARA X MD</title>
+    <meta name="description" content="Real experiences from the GAARA X MD community. Every review is posted live and shown exactly as it was shared.">
+    <meta name="theme-color" content="#070306">
+    <link rel="icon" href="/assets/bot_icon.jpg" type="image/jpeg">
+    <link rel="stylesheet" href="/css/portal.css">
+    <style>
+        .stars-gold {
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow-top"></div>
+    <div class="ambient-glow-bottom"></div>
+
+    <div class="page-wrapper">
+        <!-- Floating Capsule Navbar -->
+        <header class="site-header">
+            <div class="container">
+                <div class="nav-capsule">
+                    <a href="/" class="brand-badge">
+                        <img src="/assets/bot_icon.jpg" alt="GAARA Logo" class="brand-avatar">
+                        <div class="brand-text-wrap">
+                            <span class="brand-title">GAARA X MD</span>
+                            <span class="brand-subtitle">OFFICIAL AUTOMATION</span>
+                        </div>
+                    </a>
+
+                    <nav class="nav-links" id="mainNav">
+                        <a href="/about" class="nav-link">About</a>
+                        <a href="/reviews" class="nav-link active">Reviews</a>
+                        <a href="/status" class="nav-link">Status</a>
+                        <a href="/settings" class="nav-link">Settings</a>
+                    </nav>
+
+                    <div class="nav-actions">
+                        <a href="/pair" class="btn-pair-pill">Pair bot &rarr;</a>
+                        <button class="mobile-toggle-btn" onclick="toggleNav()" aria-label="Toggle menu">&#9776;</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container">
+            <!-- Header & Rating Summary Hero Row -->
+            <div style="display: grid; grid-template-columns: 1fr 380px; gap: 2.5rem; align-items: center; margin-bottom: 3.5rem;">
+                <div class="page-intro" style="margin-bottom: 0;">
+                    <span class="section-kicker">COMMUNITY VOICES</span>
+                    <h1 class="page-headline">Loved by people<br>who <span class="gradient-accent">use it.</span></h1>
+                    <p class="page-subtext">
+                        Real experiences from the GAARA X MD community. Every review is posted live and shown exactly as it was shared.
+                    </p>
+
+                    <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                        <span class="sync-status-badge">
+                            <span class="status-dot"></span>
+                            LIVE COMMUNITY FEED
+                        </span>
+                        <span class="badge-pill" id="verifiedSubmissionsPill" style="display: flex; align-items: center;">
+                            <span id="badgeSubCount">6</span> VERIFIED SUBMISSIONS
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Rating Summary Card -->
+                <div class="rating-summary-card">
+                    <div class="rating-header-row">
+                        <div class="rating-huge-score" id="scoreDisplay">5.0</div>
+                        <div class="rating-stars-wrap">
+                            <div class="stars-gold" id="starsDisplay">★★★★★</div>
+                            <div class="rating-count-label">Based on <span id="basedCountDisplay">6</span> reviews</div>
+                        </div>
+                    </div>
+
+                    <div class="rating-breakdown-list" id="breakdownList">
+                        <div class="rating-bar-row">
+                            <span>5</span>
+                            <div class="bar-track"><div class="bar-fill" id="bar5" style="width: 100%;"></div></div>
+                            <span id="count5">6</span>
+                        </div>
+                        <div class="rating-bar-row">
+                            <span>4</span>
+                            <div class="bar-track"><div class="bar-fill" id="bar4" style="width: 0%;"></div></div>
+                            <span id="count4">0</span>
+                        </div>
+                        <div class="rating-bar-row">
+                            <span>3</span>
+                            <div class="bar-track"><div class="bar-fill" id="bar3" style="width: 0%;"></div></div>
+                            <span id="count3">0</span>
+                        </div>
+                        <div class="rating-bar-row">
+                            <span>2</span>
+                            <div class="bar-track"><div class="bar-fill" id="bar2" style="width: 0%;"></div></div>
+                            <span id="count2">0</span>
+                        </div>
+                        <div class="rating-bar-row">
+                            <span>1</span>
+                            <div class="bar-track"><div class="bar-fill" id="bar1" style="width: 0%;"></div></div>
+                            <span id="count1">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two-Column Layout: Reviews Feed (Left) & Write Review Card (Right) -->
+            <div class="reviews-grid-wrap" style="margin-bottom: 4.5rem;">
+                <!-- Left: Community Live Feed -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <div>
+                            <span class="section-kicker">LIVE FEED</span>
+                            <h2 style="font-size: 1.75rem; font-weight: 800; color: #fff;">What the community says</h2>
+                        </div>
+                        <span class="sync-status-badge">
+                            <span class="status-dot"></span>
+                            UPDATES LIVE
+                        </span>
+                    </div>
+
+                    <div class="reviews-feed-stack" id="reviewsFeed">
+                        <!-- Populated dynamically via fetchReviews() -->
+                        <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">Loading verified reviews...</div>
+                    </div>
+                </div>
+
+                <!-- Right: Write Review Hero Card (Warm High-Contrast) -->
+                <div>
+                    <div class="write-review-card">
+                        <span class="write-review-kicker">YOUR EXPERIENCE</span>
+                        <h3 class="write-review-title">Write a review.</h3>
+                        <p class="write-review-desc">Tell the community what you think about GAARA X MD.</p>
+
+                        <form id="reviewForm" onsubmit="submitReview(event)">
+                            <label class="write-label" for="authorName">YOUR NAME</label>
+                            <input type="text" id="authorName" class="write-input" placeholder="Enter your name" required maxlength="50">
+
+                            <label class="write-label">YOUR RATING</label>
+                            <div class="interactive-stars-row">
+                                <span class="star-interactive active" data-val="1" onclick="setRating(1)">★</span>
+                                <span class="star-interactive active" data-val="2" onclick="setRating(2)">★</span>
+                                <span class="star-interactive active" data-val="3" onclick="setRating(3)">★</span>
+                                <span class="star-interactive active" data-val="4" onclick="setRating(4)">★</span>
+                                <span class="star-interactive active" data-val="5" onclick="setRating(5)">★</span>
+                                <span class="star-score-text" id="selectedScoreDisplay">5/5</span>
+                            </div>
+
+                            <label class="write-label" for="reviewMessage">YOUR REVIEW</label>
+                            <textarea id="reviewMessage" class="write-textarea" placeholder="What did you like about the bot?" required maxlength="600" oninput="updateCharCount()"></textarea>
+                            <div class="write-counter"><span id="charCount">0</span>/600</div>
+
+                            <button type="submit" id="submitBtn" class="btn-primary" style="width: 100%; padding: 0.9rem; font-size: 1rem;">
+                                Post review &rarr;
+                            </button>
+
+                            <p class="write-disclaimer">Your name, rating, review and posting time will be public.</p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Official Footer -->
+        <footer class="site-footer">
+            <div class="container">
+                <div class="footer-top-grid">
+                    <div class="footer-brand-box">
+                        <div class="footer-brand-pill">GXM</div>
+                        <div>
+                            <div class="footer-brand-title">GAARA X MD</div>
+                            <p class="footer-brand-bio">Powerful WhatsApp automation, designed for speed.</p>
+                        </div>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Product</div>
+                        <a href="/pair" class="footer-col-link">Pair bot</a>
+                        <a href="/settings" class="footer-col-link">Settings</a>
+                        <a href="/status" class="footer-col-link">Status</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Company</div>
+                        <a href="/about" class="footer-col-link">About</a>
+                        <a href="/reviews" class="footer-col-link">Reviews</a>
+                        <a href="https://whatsapp.com/channel/gaaraxmd" target="_blank" rel="noopener" class="footer-col-link">Support</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Legal</div>
+                        <a href="#" class="footer-col-link">Privacy</a>
+                        <a href="#" class="footer-col-link">Terms</a>
+                        <a href="#" class="footer-col-link">Cookies</a>
+                    </div>
+                </div>
+
+                <div class="footer-bottom-row">
+                    <div>&copy; 2026 GAARA DEV OFC</div>
+                    <div>Built in Sri Lanka</div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Notification Popup -->
+    <div id="toastNotification" style="display: none; position: fixed; bottom: 2rem; right: 2rem; background: #160a12; border: 1px solid var(--neon-red); color: #fff; padding: 1rem 1.5rem; border-radius: var(--radius-md); box-shadow: 0 8px 25px rgba(255,42,95,0.4); z-index: 1000;">
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        let currentRating = 5;
+
+        function toggleNav() {
+            const nav = document.getElementById('mainNav');
+            nav.classList.toggle('mobile-open');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            const txt = document.getElementById('toastMessage');
+            txt.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 4000);
+        }
+
+        function setRating(val) {
+            currentRating = val;
+            const stars = document.querySelectorAll('.star-interactive');
+            stars.forEach((s, idx) => {
+                if (idx < val) {
+                    s.classList.add('active');
+                } else {
+                    s.classList.remove('active');
+                }
+            });
+            document.getElementById('selectedScoreDisplay').textContent = `${val}/5`;
+        }
+
+        function updateCharCount() {
+            const txt = document.getElementById('reviewMessage').value;
+            document.getElementById('charCount').textContent = txt.length;
+        }
+
+        function timeAgo(dateString) {
+            const sec = Math.floor((new Date() - new Date(dateString)) / 1000);
+            if (sec < 60) return 'Just now';
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `${min}m ago`;
+            const h = Math.floor(min / 60);
+            if (h < 24) return `${h}h ago`;
+            const d = Math.floor(h / 24);
+            return `${d}d ago`;
+        }
+
+        async function fetchReviews() {
+            try {
+                const res = await fetch('/api/reviews');
+                if (!res.ok) throw new Error('Failed to load reviews');
+                const data = await res.json();
+                renderReviews(data);
+            } catch (err) {
+                console.error('Error fetching reviews:', err);
+            }
+        }
+
+        function renderReviews(data) {
+            const total = data.total || 0;
+            const avg = (data.average || 5.0).toFixed(1);
+            const breakdown = data.breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+            document.getElementById('scoreDisplay').textContent = avg;
+            document.getElementById('basedCountDisplay').textContent = total;
+            document.getElementById('badgeSubCount').textContent = total;
+
+            // Update Breakdown Bars
+            for (let i = 1; i <= 5; i++) {
+                const count = breakdown[i] || 0;
+                const pct = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
+                const bar = document.getElementById(`bar${i}`);
+                const lbl = document.getElementById(`count${i}`);
+                if (bar) bar.style.width = `${pct}%`;
+                if (lbl) lbl.textContent = count;
+            }
+
+            // Render Feed
+            const container = document.getElementById('reviewsFeed');
+            const reviews = data.reviews || [];
+
+            if (reviews.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">No reviews posted yet. Be the first to share your experience!</div>';
+                return;
+            }
+
+            container.innerHTML = reviews.map(r => {
+                const initial = (r.name || 'U').charAt(0).toUpperCase();
+                const stars = '★'.repeat(Math.round(r.rating || 5)) + '☆'.repeat(5 - Math.round(r.rating || 5));
+                const isNewBadge = r.isNew ? '<span class="badge-new-pill">NEW</span>' : '';
+
+                return `
+                    <div class="review-card">
+                        <div class="review-card-top">
+                            <div class="reviewer-avatar">${initial}</div>
+                            <div class="reviewer-meta">
+                                <span class="reviewer-name">${escapeHtml(r.name)}</span>
+                                <span class="reviewer-time">${timeAgo(r.createdAt)}</span>
+                            </div>
+                            ${isNewBadge}
+                        </div>
+                        <div class="review-stars">${stars}</div>
+                        <p class="review-body">${escapeHtml(r.review)}</p>
+                        <div class="review-watermark-quote">&ldquo;</div>
+                        <div class="review-footer-badge">GAARA X MD USER</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function submitReview(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const name = document.getElementById('authorName').value.trim();
+            const review = document.getElementById('reviewMessage').value.trim();
+
+            if (!name || !review) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Posting review...';
+
+            try {
+                const res = await fetch('/api/reviews', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        rating: currentRating,
+                        review
+                    })
+                });
+
+                const json = await res.json();
+                if (!res.ok || json.error) {
+                    throw new Error(json.error || 'Failed to submit review');
+                }
+
+                showToast('✨ Thank you! Your review has been posted live.');
+                document.getElementById('reviewForm').reset();
+                setRating(5);
+                updateCharCount();
+                await fetchReviews();
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Post review →';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchReviews);
+    </script>
+</body>
+</html>

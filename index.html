@@ -20,7 +20,7 @@
         <header class="site-header">
             <div class="container nav-inner">
                 <a href="/" class="brand-badge">
-                    <span class="logo-gxm">GXM</span>
+                    <img src="/assets/bot_icon.jpg" alt="GAARA Logo" class="brand-avatar">
                     <div class="brand-meta">
                         <span class="brand-name">GAARA X MD</span>
                         <span class="brand-sub">OFFICIAL AUTOMATION</span>
@@ -28,10 +28,11 @@
                 </a>
 
                 <nav class="nav-links">
-                    <a href="#about" class="nav-link">About</a>
-                    <a href="#features" class="nav-link">Features</a>
-                    <a href="#status" class="nav-link">Status</a>
+                    <a href="/about" class="nav-link">About</a>
+                    <a href="/reviews" class="nav-link">Reviews</a>
+                    <a href="/status" class="nav-link">Status</a>
                     <a href="/settings" class="nav-link">Settings</a>
+                    <a href="#commands" class="nav-link">Commands</a>
                 </nav>
 
                 <div class="nav-actions">
@@ -39,7 +40,7 @@
                         <span class="live-pulse"></span>
                         <span id="navStatusText">CONNECTING</span>
                     </div>
-                    <a href="#pair" class="btn btn-primary" style="padding: 0.5rem 1.1rem; font-size: 0.85rem;">Pair bot &rarr;</a>
+                    <a href="/pair" class="btn btn-primary" style="padding: 0.5rem 1.1rem; font-size: 0.85rem;">Pair bot &rarr;</a>
                     <button class="mobile-toggle" aria-label="Toggle navigation menu">&#9776;</button>
                 </div>
             </div>
@@ -67,7 +68,7 @@
                         </p>
 
                         <div class="hero-actions">
-                            <a href="#pair" class="btn btn-primary">Connect your bot &rarr;</a>
+                            <a href="/pair" class="btn btn-primary">Connect your bot &rarr;</a>
                             <a href="/settings" class="btn btn-secondary">
                                 <span class="btn-icon">&#9881;&#65039;</span>
                                 Settings panel
@@ -118,7 +119,7 @@
                                     <div class="hud-title-wrap">
                                         <div>
                                             <div class="hud-title">GAARA X MD</div>
-                                            <div class="hud-subtitle">POWERED BY GAARA DEV OFC &amp; VOID BAILEYS</div>
+                                             <div class="hud-subtitle">POWERED BY GAARA DEV OFC &amp; VOID BAILEYS</div>
                                         </div>
                                     </div>
                                     <div class="hud-security-badge">
@@ -290,6 +291,49 @@
                 </div>
             </section>
 
+            <!-- Command Catalog Explorer Section -->
+            <section id="commands" class="commands-section">
+                <div class="container">
+                    <div class="features-header">
+                        <div class="section-pill">&#9889; COMMAND REGISTRY</div>
+                        <h2 class="section-heading">120+ Real Active Commands</h2>
+                        <p class="section-desc">Every command is verified, structured, and wired to live Baileys socket handlers. Search, filter by category, or copy syntax.</p>
+                    </div>
+
+                    <div class="catalog-controls">
+                        <div class="catalog-search-wrap">
+                            <span class="catalog-search-icon">&#128269;</span>
+                            <input type="text" id="commandSearchInput" class="catalog-search-input" placeholder="Search 120+ commands (e.g. ping, ai, song, sticker, ban)...">
+                            <button id="clearSearchBtn" class="clear-search-btn" style="display:none;" onclick="clearCommandSearch()">&times;</button>
+                        </div>
+
+                        <div class="catalog-meta-row">
+                            <div id="catalogCategoryPills" class="catalog-category-pills">
+                                <button class="category-pill active" data-cat="all">All (120)</button>
+                                <button class="category-pill" data-cat="system">System</button>
+                                <button class="category-pill" data-cat="downloader">Downloader</button>
+                                <button class="category-pill" data-cat="media">Media</button>
+                                <button class="category-pill" data-cat="ai">AI</button>
+                                <button class="category-pill" data-cat="group">Group</button>
+                                <button class="category-pill" data-cat="utilities">Utilities</button>
+                                <button class="category-pill" data-cat="games">Games</button>
+                                <button class="category-pill" data-cat="anime">Anime</button>
+                                <button class="category-pill" data-cat="search">Search</button>
+                                <button class="category-pill" data-cat="profile">Profile</button>
+                                <button class="category-pill" data-cat="owner">Owner</button>
+                                <button class="category-pill" data-cat="navigation">Navigation</button>
+                                <button class="category-pill" data-cat="custom">Custom</button>
+                            </div>
+                            <div id="commandCountBadge" class="command-count-badge">Showing 120 commands</div>
+                        </div>
+                    </div>
+
+                    <div id="commandsGrid" class="commands-grid">
+                        <div class="cmd-loading-card">Loading commands from live backend...</div>
+                    </div>
+                </div>
+            </section>
+
             <!-- About Section -->
             <section id="about" class="about-section">
                 <div class="container about-grid">
@@ -403,7 +447,7 @@
                 <div class="footer-grid">
                     <div class="footer-brand">
                         <a href="/" class="brand-badge">
-                            <span class="logo-gxm">GXM</span>
+                            <img src="/assets/bot_icon.jpg" alt="GAARA Logo" class="brand-avatar">
                             <div class="brand-meta">
                                 <span class="brand-name">GAARA X MD</span>
                                 <span class="brand-sub">OFFICIAL AUTOMATION</span>
@@ -415,17 +459,18 @@
                     <div class="footer-col">
                         <h4>Product</h4>
                         <ul class="footer-links">
-                            <li><a href="#pair">Pair bot</a></li>
+                            <li><a href="/pair">Pair bot</a></li>
                             <li><a href="/settings">Settings</a></li>
                             <li><a href="/status">Status</a></li>
+                            <li><a href="#commands">Commands</a></li>
                         </ul>
                     </div>
 
                     <div class="footer-col">
                         <h4>Company</h4>
                         <ul class="footer-links">
-                            <li><a href="#about">About</a></li>
-                            <li><a href="#features">Features</a></li>
+                            <li><a href="/about">About</a></li>
+                            <li><a href="/reviews">Reviews</a></li>
                             <li><a href="https://github.com/prrxhex-cloud/GAARA-MD" target="_blank" rel="noopener">Support</a></li>
                         </ul>
                     </div>
@@ -433,9 +478,9 @@
                     <div class="footer-col">
                         <h4>Legal</h4>
                         <ul class="footer-links">
-                            <li><a href="#about">Privacy</a></li>
-                            <li><a href="#about">Terms</a></li>
-                            <li><a href="#about">Cookies</a></li>
+                            <li><a href="/about">Privacy</a></li>
+                            <li><a href="/about">Terms</a></li>
+                            <li><a href="/about">Cookies</a></li>
                         </ul>
                     </div>
                 </div>

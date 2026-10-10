@@ -30,7 +30,9 @@ export const DEFAULT_SETTINGS = {
 
     // Status Anti-Delete & Auto-Status
     autoStatus: true,
-    autoStatusEmoji: '💖',
+    autoStatusView: true,
+    autoStatusLike: false,
+    autoStatusEmoji: '🎀',
     statusAntiDelete: true,
     statusDestination: 'self', // 'self' | 'same'
 
@@ -42,13 +44,28 @@ export const DEFAULT_SETTINGS = {
     headerTitle: SUPPORT_HEADER,
     footerText: BOT_FOOTER,
 
+    // Bot Behavior & Presence
+    commandReactions: true,
+    autoTyping: false,
+    autoRecording: false,
+    alwaysOnline: false,
+    buttonMode: true,
+    antiBug: true,
+
+    // Auto Call Settings
+    autoCallAnswerMode: false,
+    autoCallVoiceFile: '',
+    antiCallWarningTemplate: '⚠️ WARNING : {warning}/3\n🔞 DO NOT CALL THIS BOT NUMBER\n🚫 AUTO BLOCK AFTER : {remaining_text}',
+    antiCallBlockedTemplate: '📞 CALL REJECTED\n⚠️ WARNING LIMIT EXCEEDED : 3/3\n🚫 YOU HAVE BEEN AUTOMATICALLY BLOCKED',
+
     autoReply: false,
     aiAutoReply: false,
+    ownerProfile: '',
     ownerNumber: '',
     ownerName: 'GAARA DEV OFC',
     ownerBio: 'Official Developer & Creator of GAARA X MD Multi-Device WhatsApp Bot.',
     blacklist: [],
-    customLogoUrl: 'https://raw.githubusercontent.com/GaaraDev/assets/main/gaara-logo.png',
+    customLogoUrl: '/assets/bot_icon.jpg',
     channelUrl: DEFAULT_CHANNEL_URL,
     sasaDevApiKey: ''
 };

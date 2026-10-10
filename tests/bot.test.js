@@ -301,6 +301,98 @@ describe('5. Express Server & Keepalive Endpoints', () => {
             server.close();
         }
     });
+
+    test('portal HTML routes (/about, /reviews, /status, /pair) and /api/commands operate correctly', async () => {
+        const app = createServer();
+        const server = app.listen(0);
+        const port = server.address().port;
+
+        try {
+            // 1. /about
+            const aboutRes = await fetch(`http://localhost:${port}/about`);
+            assert.equal(aboutRes.status, 200);
+            const aboutHtml = await aboutRes.text();
+            assert.ok(aboutHtml.includes('GAARA X MD'));
+            assert.ok(aboutHtml.includes('Speed first'));
+            assert.ok(aboutHtml.includes('portal.css'));
+
+            // 2. /reviews
+            const reviewsRes = await fetch(`http://localhost:${port}/reviews`);
+            assert.equal(reviewsRes.status, 200);
+            const reviewsHtml = await reviewsRes.text();
+            assert.ok(reviewsHtml.includes('Write a review'));
+            assert.ok(reviewsHtml.includes('COMMUNITY VOICES'));
+
+            // 3. /status
+            const statusRes = await fetch(`http://localhost:${port}/status`);
+            assert.equal(statusRes.status, 200);
+            const statusHtml = await statusRes.text();
+            assert.ok(statusHtml.includes('All systems operational'));
+            assert.ok(statusHtml.includes('Core API'));
+
+            // 4. /pair
+            const pairRes = await fetch(`http://localhost:${port}/pair`);
+            assert.equal(pairRes.status, 200);
+            const pairHtml = await pairRes.text();
+            assert.ok(pairHtml.includes('WhatsApp Phone Number'));
+            assert.ok(pairHtml.includes('GET PAIRING CODE'));
+
+            // 5. /settings
+            const settingsRes = await fetch(`http://localhost:${port}/settings`);
+            assert.equal(settingsRes.status, 200);
+            const settingsHtml = await settingsRes.text();
+            assert.ok(settingsHtml.includes('Bot settings'));
+            assert.ok(settingsHtml.includes('Bot behavior'));
+
+            // 6. /api/commands
+            const cmdRes = await fetch(`http://localhost:${port}/api/commands`);
+            assert.equal(cmdRes.status, 200);
+            const cmdData = await cmdRes.json();
+            assert.equal(cmdData.total, 120);
+            assert.equal(cmdData.categories.length, 13);
+            assert.ok(cmdData.commands.system.length > 0);
+            assert.ok(cmdData.commands.ai.length > 0);
+            assert.ok(cmdData.commands.downloader.length > 0);
+
+            // 7. /api/reviews GET
+            const revApiRes = await fetch(`http://localhost:${port}/api/reviews`);
+            assert.equal(revApiRes.status, 200);
+            const revData = await revApiRes.json();
+            assert.ok(Array.isArray(revData.reviews));
+            assert.ok(revData.reviews.length >= 6);
+            assert.ok(revData.reviews.some(r => r.name.includes('Sayuru Senavirathna')));
+            assert.ok(revData.average >= 4.5);
+
+            // 8. /api/reviews POST validation
+            const invalidPost = await fetch(`http://localhost:${port}/api/reviews`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'A', review: 'Hi' })
+            });
+            assert.equal(invalidPost.status, 400);
+
+            // 9. /api/reviews POST valid
+            const validPost = await fetch(`http://localhost:${port}/api/reviews`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Automated Test User',
+                    rating: 5,
+                    review: 'Exemplary cyber portal test verification with zero fake data!'
+                })
+            });
+            assert.equal(validPost.status, 200);
+            const created = await validPost.json();
+            assert.ok(created.success);
+            assert.equal(created.review.name, 'Automated Test User');
+            assert.ok(created.review.id);
+
+            // Clean up test review so database is not polluted with fake test reviews!
+            db.removeReview(created.review.id);
+        } finally {
+            server.close();
+        }
+    });
 });
 
 describe('6. Anti-Edit, Configurable Destinations & Multi-Cloud Tests', () => {

@@ -721,12 +721,164 @@
     }
 
     // =========================================================================
-    // 8. Initialization
+    // 8. Command Catalog Explorer (120+ Real Active Commands)
+    // =========================================================================
+    let allCommandsList = [];
+    let activeCategoryFilter = 'all';
+
+    async function initCommandExplorer() {
+        const grid = document.getElementById('commandsGrid');
+        const pillsWrap = document.getElementById('catalogCategoryPills');
+        const searchInput = document.getElementById('commandSearchInput');
+        const clearBtn = document.getElementById('clearSearchBtn');
+
+        if (!grid) return;
+
+        try {
+            const res = await fetch(apiUrl('/api/commands'), { signal: AbortSignal.timeout(6000) });
+            const data = await res.json();
+
+            allCommandsList = [];
+            if (data.commands && typeof data.commands === 'object') {
+                for (const [catName, list] of Object.entries(data.commands)) {
+                    if (Array.isArray(list)) {
+                        for (const item of list) {
+                            allCommandsList.push({
+                                ...item,
+                                category: item.category || catName
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (pillsWrap && Array.isArray(data.categories)) {
+                const totalCount = allCommandsList.length;
+                const catCounts = {};
+                for (const cmd of allCommandsList) {
+                    catCounts[cmd.category] = (catCounts[cmd.category] || 0) + 1;
+                }
+
+                let pillsHtml = `<button class="category-pill active" data-cat="all">All (${totalCount})</button>`;
+                for (const cat of data.categories) {
+                    const count = catCounts[cat] || 0;
+                    pillsHtml += `<button class="category-pill" data-cat="${cat}">${cat.charAt(0).toUpperCase() + cat.slice(1)} (${count})</button>`;
+                }
+                pillsWrap.innerHTML = pillsHtml;
+
+                pillsWrap.querySelectorAll('.category-pill').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        pillsWrap.querySelectorAll('.category-pill').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        activeCategoryFilter = btn.dataset.cat || 'all';
+                        renderFilteredCommands();
+                    });
+                });
+            }
+
+            renderFilteredCommands();
+
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    if (clearBtn) clearBtn.style.display = searchInput.value ? 'block' : 'none';
+                    renderFilteredCommands();
+                });
+            }
+
+            window.clearCommandSearch = function () {
+                if (searchInput) {
+                    searchInput.value = '';
+                    if (clearBtn) clearBtn.style.display = 'none';
+                    renderFilteredCommands();
+                }
+            };
+        } catch (err) {
+            console.warn('Could not fetch command catalog:', err);
+            if (grid) {
+                grid.innerHTML = `<div class="cmd-loading-card" style="color:var(--neon-red);">Failed to load live commands. Please check backend connection.</div>`;
+            }
+        }
+    }
+
+    function renderFilteredCommands() {
+        const grid = document.getElementById('commandsGrid');
+        const searchInput = document.getElementById('commandSearchInput');
+        const countBadge = document.getElementById('commandCountBadge');
+        if (!grid) return;
+
+        const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        const filtered = allCommandsList.filter(cmd => {
+            const matchesCategory = activeCategoryFilter === 'all' || cmd.category.toLowerCase() === activeCategoryFilter.toLowerCase();
+            if (!matchesCategory) return false;
+
+            if (!query) return true;
+            const nameMatch = cmd.name.toLowerCase().includes(query);
+            const descMatch = (cmd.description || '').toLowerCase().includes(query);
+            const usageMatch = (cmd.usage || '').toLowerCase().includes(query);
+            const aliasMatch = Array.isArray(cmd.aliases) && cmd.aliases.some(a => a.toLowerCase().includes(query));
+            return nameMatch || descMatch || usageMatch || aliasMatch;
+        });
+
+        if (countBadge) {
+            countBadge.textContent = `Showing ${filtered.length} of ${allCommandsList.length} commands`;
+        }
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `<div class="cmd-loading-card">No commands found matching "${query}". Try searching "ping", "sticker", or "ai".</div>`;
+            return;
+        }
+
+        grid.innerHTML = filtered.map(cmd => {
+            const usageText = cmd.usage || `.${cmd.name}`;
+            return `
+                <div class="cmd-card">
+                    <div>
+                        <div class="cmd-card-top">
+                            <span class="cmd-name">.${escapeHtml(cmd.name)}</span>
+                            <span class="cmd-badge">${escapeHtml(cmd.category)}</span>
+                        </div>
+                        <p class="cmd-desc">${escapeHtml(cmd.description || 'Command handler')}</p>
+                    </div>
+                    <div class="cmd-card-bottom">
+                        <span class="cmd-usage" title="Usage">${escapeHtml(usageText)}</span>
+                        <button class="cmd-copy-btn" onclick="copyCommandUsage('${escapeHtml(usageText)}')">Copy</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    window.copyCommandUsage = function (usage) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(usage).then(() => {
+                showToast(`Copied: ${usage}`);
+            }).catch(() => {
+                showToast(`Command: ${usage}`);
+            });
+        } else {
+            showToast(`Command: ${usage}`);
+        }
+    };
+
+    // =========================================================================
+    // 9. Initialization
     // =========================================================================
     document.addEventListener('DOMContentLoaded', () => {
         init3DParticleCanvas();
         init3DTiltCards();
         initNavbar();
+        initCommandExplorer();
 
         // Initial poll and recurring telemetry loop
         pollRealTimeStatus();

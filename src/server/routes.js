@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import config from '../../config/index.js';
 import db from '../../config/database.js';
 import { getBotStatus, requestPairing, initBotSocket, resetSession, restartBotSocket } from '../bot/socket.js';
@@ -21,6 +22,12 @@ export const pairLimiter = createRateLimiter({
     windowMs: 60 * 1000,
     max: 5,
     message: 'Too many pairing requests. Please wait 1 minute before trying again.'
+});
+
+export const reviewLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: 'Too many reviews submitted. Please wait 1 minute before trying again.'
 });
 
 export function setupRoutes(app) {
@@ -47,6 +54,14 @@ export function setupRoutes(app) {
     // ==========================================
     app.get('/', (req, res) => {
         res.sendFile(path.join(publicDir, 'index.html'));
+    });
+
+    app.get('/about', (req, res) => {
+        res.sendFile(path.join(publicDir, 'about.html'));
+    });
+
+    app.get('/reviews', (req, res) => {
+        res.sendFile(path.join(publicDir, 'reviews.html'));
     });
 
     app.get('/pair', (req, res) => {
@@ -85,6 +100,7 @@ export function setupRoutes(app) {
             prefix: settings.prefix,
             mode: settings.mode,
             commandCount: totalCommands,
+            connectedBots: botStatus.connection === 'open' ? 1 : 0,
             categories: Object.keys(allCommandCategories),
             serverUptime: Math.floor(process.uptime()),
             memory: {
@@ -94,6 +110,55 @@ export function setupRoutes(app) {
             platform: process.platform,
             nodeVersion: process.version
         });
+    });
+
+    // Real command registry explorer
+    app.get('/api/commands', (req, res) => {
+        const catalog = {};
+        let total = 0;
+        for (const [category, cmds] of Object.entries(allCommandCategories)) {
+            catalog[category] = Object.entries(cmds).map(([name, def]) => {
+                total++;
+                return {
+                    name,
+                    description: def.description || 'Command handler',
+                    usage: def.usage || `.${name}`,
+                    aliases: def.aliases || [],
+                    category
+                };
+            });
+        }
+        res.json({ total, categories: Object.keys(allCommandCategories), commands: catalog });
+    });
+
+    // Community reviews API (100% real user submissions)
+    app.get('/api/reviews', (req, res) => {
+        const stats = db.getReviewStats();
+        const reviews = db.getReviews();
+        res.json({ reviews, ...stats });
+    });
+
+    app.post('/api/reviews', reviewLimiter, (req, res) => {
+        const { name, rating, review } = req.body || {};
+        if (!name || typeof name !== 'string' || name.trim().length < 2) {
+            return res.status(400).json({ error: 'Please enter a valid name (at least 2 characters)' });
+        }
+        if (!review || typeof review !== 'string' || review.trim().length < 5) {
+            return res.status(400).json({ error: 'Please enter a review of at least 5 characters' });
+        }
+        const cleanRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+
+        try {
+            const created = db.addReview({
+                name: name.trim().slice(0, 50),
+                rating: cleanRating,
+                review: review.trim().slice(0, 600)
+            });
+            const stats = db.getReviewStats();
+            res.json({ success: true, review: created, stats });
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
     });
 
     app.post('/api/pair', pairLimiter, async (req, res) => {
@@ -251,6 +316,60 @@ export function setupRoutes(app) {
             res.json({ success: true, settings: db.maskSettings(updated) });
         } catch (err) {
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.post('/api/upload/logo', requireAuth, (req, res) => {
+        const { dataUrl } = req.body || {};
+        if (!dataUrl || typeof dataUrl !== 'string') {
+            return res.status(400).json({ error: 'Invalid logo data' });
+        }
+        try {
+            if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+                db.updateSettings({ customLogoUrl: dataUrl });
+                return res.json({ success: true, url: dataUrl });
+            }
+            const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                return res.status(400).json({ error: 'Invalid image format. Provide base64 or URL.' });
+            }
+            const buffer = Buffer.from(matches[2], 'base64');
+            const fileName = `custom_logo_${Date.now()}.png`;
+            const assetsDir = path.join(publicDir, 'assets');
+            if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+            const filePath = path.join(assetsDir, fileName);
+            fs.writeFileSync(filePath, buffer);
+            const publicUrl = `/assets/${fileName}`;
+            db.updateSettings({ customLogoUrl: publicUrl });
+            res.json({ success: true, url: publicUrl });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to process logo upload' });
+        }
+    });
+
+    app.post('/api/upload/voice', requireAuth, (req, res) => {
+        const { dataUrl, fileName: originalName } = req.body || {};
+        if (!dataUrl || typeof dataUrl !== 'string') {
+            return res.status(400).json({ error: 'Invalid voice data' });
+        }
+        try {
+            const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                return res.status(400).json({ error: 'Invalid audio format. Provide base64 audio.' });
+            }
+            const buffer = Buffer.from(matches[2], 'base64');
+            if (buffer.length > 15 * 1024 * 1024) {
+                return res.status(400).json({ error: 'Audio file exceeds 15 MB limit' });
+            }
+            const safeName = `autocall_voice_${Date.now()}.mp3`;
+            const targetDir = path.join(config.rootDir, 'data');
+            if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+            const filePath = path.join(targetDir, safeName);
+            fs.writeFileSync(filePath, buffer);
+            db.updateSettings({ autoCallVoiceFile: filePath });
+            res.json({ success: true, fileName: safeName, path: filePath });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to save voice file' });
         }
     });
 

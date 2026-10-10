@@ -3,601 +3,723 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAARA X MD — Settings Dashboard</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <title>Secure Bot Settings | GAARA X MD</title>
+    <meta name="description" content="Live control panel for GAARA X MD. Configure behavior, anti-call, anti-delete, auto-status and daily schedules.">
+    <meta name="theme-color" content="#070306">
+    <link rel="icon" href="/assets/bot_icon.jpg" type="image/jpeg">
+    <link rel="stylesheet" href="/css/portal.css">
+    <style>
+        .placeholder-tag {
+            background: rgba(255, 42, 95, 0.12);
+            border: 1px solid rgba(255, 42, 95, 0.3);
+            color: var(--neon-red);
+            font-size: 0.72rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+            cursor: pointer;
+            display: inline-block;
+        }
+        .login-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(7, 3, 6, 0.95);
+            backdrop-filter: blur(20px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <div class="logo-container">
-            <div class="logo-badge">⚡ GAARA</div>
-            <div class="brand-title">GAARA X MD DASHBOARD</div>
+    <div class="ambient-glow-top"></div>
+    <div class="ambient-glow-bottom"></div>
+
+    <!-- Login Authentication Modal (Shown if session is missing) -->
+    <div id="loginOverlay" class="login-overlay" style="display: none;">
+        <div class="card-section" style="max-width: 440px; width: 100%; border-color: var(--border-accent); box-shadow: 0 10px 40px rgba(255,42,95,0.3);">
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <img src="/assets/bot_icon.jpg" alt="GAARA Avatar" style="width: 56px; height: 56px; border-radius: 14px; border: 2px solid var(--neon-red);">
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: #fff; margin-top: 0.75rem;">Panel Authentication</h2>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">Enter your panel password to manage GAARA X MD.</p>
+            </div>
+            <form onsubmit="handlePanelLogin(event)">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" for="loginPasswordInput">Panel Password</label>
+                    <input type="password" id="loginPasswordInput" class="form-input" placeholder="Enter dashboard password" required autofocus>
+                </div>
+                <button type="submit" id="btnLogin" class="btn-primary" style="width: 100%; padding: 0.85rem;">
+                    Unlock Dashboard &rarr;
+                </button>
+                <div id="loginErrorMsg" style="color: var(--neon-red); font-size: 0.8rem; text-align: center; margin-top: 0.75rem; display: none;"></div>
+            </form>
         </div>
-        <nav>
-            <a href="/pair">📲 Link Device</a>
-            <a href="/settings" class="active">⚙️ Settings</a>
-            <a href="/status">📊 Status</a>
-            <button class="btn btn-secondary" onclick="promptBackendUrl()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" title="Configure Backend API URL for Vercel">🌐 Server URL</button>
-        </nav>
-    </header>
+    </div>
 
-    <main>
-        <!-- Tab Navigation -->
-        <div class="tabs-header">
-            <button class="tab-btn active" data-tab="tab-automation">
-                <span>01</span> ⚡ Automation
-            </button>
-            <button class="tab-btn" data-tab="tab-schedules">
-                <span>02</span> 📅 Schedules
-            </button>
-            <button class="tab-btn" data-tab="tab-connection">
-                <span>03</span> 📶 Connection
-            </button>
-            <button class="tab-btn" data-tab="tab-replies">
-                <span>04</span> 💬 Smart Replies
-            </button>
-            <button class="tab-btn" data-tab="tab-profile">
-                <span>05</span> 👑 Identity & Profile
-            </button>
-            <button class="tab-btn" data-tab="tab-security">
-                <span>06</span> 🔒 Security & Cloud
-            </button>
-        </div>
-
-        <!-- ==============================================
-             01 AUTOMATION TAB
-             ============================================== -->
-        <div id="tab-automation" class="tab-content active">
-            <div class="card-grid">
-                <!-- Anti-Delete Card -->
-                <div class="card">
-                    <h2 class="card-title">🗑️ Anti-Delete Recovery</h2>
-                    <p class="card-desc">Caches incoming messages and media; if deleted for everyone, recovers text and media to the selected destination.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Enable Anti-Delete</div>
-                            <div class="control-sublabel">Recover deleted text and media</div>
+    <div class="page-wrapper">
+        <!-- Floating Capsule Navbar -->
+        <header class="site-header">
+            <div class="container">
+                <div class="nav-capsule">
+                    <a href="/" class="brand-badge">
+                        <img src="/assets/bot_icon.jpg" alt="GAARA Logo" class="brand-avatar">
+                        <div class="brand-text-wrap">
+                            <span class="brand-title">GAARA X MD</span>
+                            <span class="brand-subtitle">OFFICIAL AUTOMATION</span>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" id="antiDeleteToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
+                    </a>
 
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Restore Destination:</label>
-                        <select id="antiDeleteDestSelect">
-                            <option value="self">Self Chat (Message Yourself)</option>
-                            <option value="same">Same Chat (Where message was deleted)</option>
-                        </select>
-                    </div>
-                </div>
+                    <nav class="nav-links" id="mainNav">
+                        <a href="/about" class="nav-link">About</a>
+                        <a href="/reviews" class="nav-link">Reviews</a>
+                        <a href="/status" class="nav-link">Status</a>
+                        <a href="/settings" class="nav-link active">Settings</a>
+                    </nav>
 
-                <!-- Anti-Edit Card -->
-                <div class="card">
-                    <h2 class="card-title">✏️ Anti-Edit Protection</h2>
-                    <p class="card-desc">Detects edited messages, compares original vs new message text from cache, and posts comparison.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Enable Anti-Edit</div>
-                            <div class="control-sublabel">Catch and log edited messages</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="antiEditToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Restore Destination:</label>
-                        <select id="antiEditDestSelect">
-                            <option value="self">Self Chat (Message Yourself)</option>
-                            <option value="same">Same Chat (Where message was edited)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- View-Once Saver Card -->
-                <div class="card">
-                    <h2 class="card-title">📷 Anti View-Once Saver</h2>
-                    <p class="card-desc">Automatically intercepts and saves View Once photos, videos, and voice notes before expiration.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Auto-Save View Once</div>
-                            <div class="control-sublabel">Download ephemeral media permanently</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="viewOnceSaverToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Restore Destination:</label>
-                        <select id="viewOnceDestSelect">
-                            <option value="self">Self Chat (Message Yourself)</option>
-                            <option value="same">Same Chat (Where received)</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 0.8rem;">
-                        <label class="input-label">Trigger Unlock Mode:</label>
-                        <select id="viewOnceTriggerModeSelect">
-                            <option value="both">Both (Command &amp; Emoji)</option>
-                            <option value="command">Command Only (.vv, .readviewonce)</option>
-                            <option value="emoji">Emoji Reply Only (🔓, 👁️)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Auto-Status & Status Anti-Delete Card -->
-                <div class="card">
-                    <h2 class="card-title">💖 Status Automations</h2>
-                    <p class="card-desc">Auto-view and like contact stories, plus recover deleted statuses.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Auto-Status Viewer</div>
-                            <div class="control-sublabel">Mark new status updates as read & like</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="autoStatusToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 0.8rem;">
-                        <label class="input-label">Reaction Emoji:</label>
-                        <select id="autoStatusEmoji">
-                            <option value="💖">💖 Sparkling Pink Heart (Default)</option>
-                            <option value="❤️">❤️ Red Heart</option>
-                            <option value="🔥">🔥 Fire</option>
-                            <option value="👍">👍 Thumbs Up</option>
-                            <option value="🌸">🌸 Cherry Blossom</option>
-                            <option value="⚡">⚡ Lightning Bolt</option>
-                            <option value="🌟">🌟 Glowing Star</option>
-                        </select>
-                    </div>
-
-                    <div class="control-row" style="margin-top: 0.8rem;">
-                        <div>
-                            <div class="control-label">Status Anti-Delete</div>
-                            <div class="control-sublabel">Save status media if sender deletes it</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="statusAntiDeleteToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 0.8rem;">
-                        <label class="input-label">Status Restore Destination:</label>
-                        <select id="statusDestSelect">
-                            <option value="self">Self Chat (Message Yourself)</option>
-                            <option value="same">Same Chat</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Bot Logs & Notifications Card -->
-                <div class="card">
-                    <h2 class="card-title">📜 Bot Logs & Notifications</h2>
-                    <p class="card-desc">Configure where system connection events, restarts, and alerts are dispatched.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Enable Bot Event Logs</div>
-                            <div class="control-sublabel">Dispatch socket connection & pairing logs</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="botLogsToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Log Notification Destination:</label>
-                        <select id="botLogsDestSelect">
-                            <option value="self">Self Chat (Message Yourself)</option>
-                            <option value="same">Same Chat</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Anti-Call Card -->
-                <div class="card">
-                    <h2 class="card-title">📵 Anti-Call Protection</h2>
-                    <p class="card-desc">Automatically reject incoming voice and video calls, issue 3 warnings, and auto-block on the 4th attempt.</p>
-                    
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">Enable Anti-Call</div>
-                            <div class="control-sublabel">Block call spammers automatically</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="antiCallToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Max Warnings Before Block:</label>
-                        <input type="number" id="antiCallWarnings" min="1" max="10" value="3">
-                    </div>
-
-                    <div class="input-group">
-                        <label class="input-label">Warning Message Template:</label>
-                        <textarea id="antiCallTemplate" rows="3" placeholder="Use {warning}, {caller}, {remaining_text}"></textarea>
-                    </div>
-                </div>
-
-                <!-- Smart AI Auto-Reply Card -->
-                <div class="card">
-                    <h2 class="card-title">🤖 Sasa AI Plus Auto-Reply</h2>
-                    <p class="card-desc">Replies to direct 1-on-1 private chats using SASA DEV AI Plus and Owner Profile context. Groups & newsletters are strictly ignored.</p>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">AI Auto-Reply (1-on-1 Chats)</div>
-                            <div class="control-sublabel">Engage contacts politely when away</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="aiAutoReplyToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="control-row">
-                        <div>
-                            <div class="control-label">General Auto-Reply Fallback</div>
-                            <div class="control-sublabel">Send owner context reply if AI is offline</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="autoReplyToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="input-group" style="margin-top: 1rem;">
-                        <label class="input-label">Sasa Dev API Key (Permanent / Secured):</label>
-                        <input type="password" id="sasaApiKeyInput" placeholder="Server-side permanent key active" disabled style="opacity: 0.75; cursor: not-allowed; letter-spacing: 0.15em;">
-                        <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 0.3rem;">🔒 Permanent key securely managed on server backend.</small>
+                    <div class="nav-actions">
+                        <a href="/pair" class="btn-pair-pill">Pair bot &rarr;</a>
+                        <button class="mobile-toggle-btn" onclick="toggleNav()" aria-label="Toggle menu">&#9776;</button>
                     </div>
                 </div>
             </div>
+        </header>
 
-            <div style="text-align: right; margin-top: 1.5rem;">
-                <button class="btn" onclick="saveAutomationSettings()">💾 SAVE AUTOMATION SETTINGS</button>
-            </div>
-        </div>
-
-        <!-- ==============================================
-             02 SCHEDULES TAB
-             ============================================== -->
-        <div id="tab-schedules" class="tab-content">
-            <div class="card" style="margin-bottom: 2rem;">
-                <h2 class="card-title">➕ Create Scheduled Message</h2>
-                <p class="card-desc">Schedule messages to be automatically sent to a contact or group either daily or one-time.</p>
-
-                <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 1rem;">
-                    <div class="input-group">
-                        <label class="input-label">Target Phone / Group JID:</label>
-                        <input type="text" id="schedTargetInput" placeholder="e.g. 94771234567">
-                    </div>
-                    <div class="input-group">
-                        <label class="input-label">Schedule Type:</label>
-                        <select id="schedTypeSelect">
-                            <option value="daily">Daily Recurring</option>
-                            <option value="once">One-Time Specific Date</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label class="input-label">Time (24h HH:mm or ISO):</label>
-                        <input type="text" id="schedTimeInput" placeholder="e.g. 09:30 or 2026-10-08T10:00:00Z">
-                    </div>
+        <!-- Main Content -->
+        <main class="container">
+            <!-- Header Split Row (Matches Screenshot 547) -->
+            <div class="header-split">
+                <div class="page-intro" style="margin-bottom: 0;">
+                    <span class="section-kicker">LIVE CONTROL PANEL</span>
+                    <h1 class="page-headline">Bot settings</h1>
+                    <p class="page-subtext">Changes apply immediately. No restart required.</p>
                 </div>
 
-                <div class="input-group">
-                    <label class="input-label">Message Content:</label>
-                    <textarea id="schedMessageInput" rows="2" placeholder="Enter the scheduled message text..."></textarea>
-                </div>
-
-                <button class="btn" onclick="addSchedule()">📅 ADD SCHEDULE</button>
-            </div>
-
-            <div class="card">
-                <h2 class="card-title">📋 Active Schedules</h2>
-                <div style="overflow-x: auto;">
-                    <table class="custom-table">
-                        <thead>
-                            <tr>
-                                <th>Target</th>
-                                <th>Message</th>
-                                <th>Type</th>
-                                <th>Time</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="schedulesTableBody">
-                            <tr>
-                                <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading schedules...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==============================================
-             03 CONNECTION TAB
-             ============================================== -->
-        <div id="tab-connection" class="tab-content">
-            <div class="card-grid">
-                <div class="card">
-                    <h2 class="card-title">📶 Connection Status</h2>
-                    <p class="card-desc">Live Baileys WebSocket telemetry and device health (live polling active).</p>
-
-                    <div class="control-row">
-                        <div class="control-label">Status:</div>
-                        <div id="connStatusBadge" class="status-pill status-connecting">CHECKING...</div>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Linked Phone:</div>
-                        <div id="connPhone" style="font-weight: 700; color: #fff;">--</div>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Platform:</div>
-                        <div id="connPlatform" style="color: var(--text-secondary);">Windows (Desktop)</div>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Uptime:</div>
-                        <div id="connUptime" style="color: var(--success); font-weight: 700;">--</div>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Messages Handled:</div>
-                        <div id="connMsgs" style="color: #fff; font-weight: 700;">0</div>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Calls Intercepted:</div>
-                        <div id="connCalls" style="color: var(--danger); font-weight: 700;">0</div>
-                    </div>
-
-                    <div style="margin-top: 1.5rem; display: flex; gap: 0.8rem; flex-wrap: wrap;">
-                        <button class="btn btn-secondary" onclick="restartBot()">🔄 Restart Bot</button>
-                        <button class="btn" onclick="disconnectBot()" style="background: rgba(255, 51, 75, 0.2); border: 1px solid #ff334b; color: #ff334b;">⚠️ Disconnect / Unlink</button>
-                        <a href="/pair" class="btn">📲 Re-Pair / Link</a>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2 class="card-title">🛡️ Anti-Ban Safeguards Active</h2>
-                    <p class="card-desc">GAARA X MD features hardened security flags to prevent WhatsApp account restrictions.</p>
-
-                    <div class="control-row">
-                        <div class="control-label">Human Response Jitter</div>
-                        <span class="status-pill status-online">100ms - 250ms (Snappy)</span>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Memory Guard</div>
-                        <span class="status-pill status-online">200 MB Limit</span>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Low Memory Engine</div>
-                        <span class="status-pill status-online">ENABLED</span>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Anti-Bug / Stanza Filter</div>
-                        <span class="status-pill status-online">PROTECTED</span>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-label">Socket Always-On</div>
-                        <span class="status-pill status-online">ACTIVE</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==============================================
-             04 SMART REPLIES TAB
-             ============================================== -->
-        <div id="tab-replies" class="tab-content">
-            <div class="card" style="margin-bottom: 2rem;">
-                <h2 class="card-title">➕ Add Custom Trigger Response</h2>
-                <p class="card-desc">Configure keyword-based auto replies that execute instantly before AI fallbacks.</p>
-
-                <div class="card-grid" style="grid-template-columns: 1fr 1fr 160px; margin-bottom: 1rem;">
-                    <div class="input-group">
-                        <label class="input-label">Trigger Word or Phrase:</label>
-                        <input type="text" id="replyTriggerInput" placeholder="e.g. price, hello, order">
-                    </div>
-                    <div class="input-group">
-                        <label class="input-label">Response Text:</label>
-                        <input type="text" id="replyResponseInput" placeholder="e.g. Our current prices are...">
-                    </div>
-                    <div class="input-group">
-                        <label class="input-label">Match Type:</label>
-                        <select id="replyMatchTypeSelect">
-                            <option value="contains">Contains</option>
-                            <option value="exact">Exact Match</option>
-                            <option value="regex">Regex</option>
-                        </select>
-                    </div>
-                </div>
-
-                <button class="btn" onclick="addCustomReply()">💬 ADD AUTO-REPLY</button>
-            </div>
-
-            <div class="card">
-                <h2 class="card-title">📋 Configured Trigger Replies</h2>
-                <div style="overflow-x: auto;">
-                    <table class="custom-table">
-                        <thead>
-                            <tr>
-                                <th>Trigger</th>
-                                <th>Match Type</th>
-                                <th>Response</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="repliesTableBody">
-                            <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-muted);">Loading replies...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==============================================
-             05 PROFILE & IDENTITY TAB
-             ============================================== -->
-        <div id="tab-profile" class="tab-content">
-            <div class="card">
-                <h2 class="card-title">👑 Bot Identity & Owner Profile</h2>
-                <p class="card-desc">Customize how your bot presents itself across chats, framing boxes, and AI auto-replies.</p>
-
-                <div class="card-grid">
-                    <div>
-                        <div class="input-group">
-                            <label class="input-label">Bot Display Name:</label>
-                            <input type="text" id="botNameInput" placeholder="GAARA X MD">
+                <!-- Connected Account Box -->
+                <div class="connected-badge-card" id="connectedAccountCard">
+                    <div class="conn-indicator">
+                        <span class="status-dot" id="accStatusDot"></span>
+                        <div>
+                            <div class="conn-meta-label">CONNECTED ACCOUNT</div>
+                            <div class="conn-phone-num" id="accPhoneNumber">Checking...</div>
                         </div>
-                        <div class="input-group">
-                            <label class="input-label">Command Prefix:</label>
-                            <input type="text" id="prefixInput" placeholder=".">
+                    </div>
+                    <a class="logout-link" onclick="handleLogout()">Log out</a>
+                </div>
+            </div>
+
+            <!-- Tab Controls Bar (Matches Screenshot 547) -->
+            <div class="tabs-control-bar">
+                <div class="tabs-group">
+                    <button class="tab-pill active" data-tab="tab-automation" onclick="switchTab('tab-automation', this)">
+                        <span class="tab-num">01</span> ⚙️ Automation
+                    </button>
+                    <button class="tab-pill" data-tab="tab-schedules" onclick="switchTab('tab-schedules', this)">
+                        <span class="tab-num">02</span> 📅 Schedules
+                    </button>
+                    <button class="tab-pill" data-tab="tab-connection" onclick="switchTab('tab-connection', this)">
+                        <span class="tab-num">03</span> 📶 Connection
+                    </button>
+                </div>
+
+                <div class="sync-status-badge">
+                    <span class="status-dot"></span>
+                    <span>Realtime sync &bull; All changes saved</span>
+                </div>
+            </div>
+
+            <!-- =============================================================
+                 TAB 01: AUTOMATION (Screenshots 547, 548, 549, 550, 551, 552, 553, 554, 555)
+                 ============================================================= -->
+            <div id="tab-automation" class="tab-page">
+                <!-- Section: Bot Behavior -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Bot behavior</h2>
+                            <p class="card-desc">Choose who can use your bot and which prefix activates commands.</p>
                         </div>
-                        <div class="input-group">
-                            <label class="input-label">Bot Mode:</label>
-                            <select id="modeSelect">
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="botModeSelect">BOT MODE</label>
+                            <select id="botModeSelect" class="form-select" onchange="saveImmediateSetting('mode', this.value)">
                                 <option value="public">Public</option>
                                 <option value="private">Private</option>
                                 <option value="groups">Groups only</option>
                                 <option value="inbox">Inbox only</option>
                             </select>
                         </div>
-                        <div class="input-group">
-                            <label class="input-label">Header Framing Box Title:</label>
-                            <input type="text" id="headerTitleInput" placeholder="GAARA X MD SUPPORT 🌸">
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">Footer Framing Box Text:</label>
-                            <input type="text" id="footerTextInput" placeholder="THIS BOT BUILT BY GAARA DEV OFC.">
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">Bot Logo Image URL:</label>
-                            <input type="text" id="logoUrlInput" placeholder="https://...">
-                        </div>
-                    </div>
 
-                    <div>
-                        <div class="input-group">
-                            <label class="input-label">Owner Name:</label>
-                            <input type="text" id="ownerNameInput" placeholder="GAARA DEV OFC">
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">Owner WhatsApp Number:</label>
-                            <input type="text" id="ownerNumberInput" placeholder="e.g. 94771234567">
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">Channel URL:</label>
-                            <input type="text" id="channelUrlInput" placeholder="https://whatsapp.com/channel/...">
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">Owner Bio / Context for AI:</label>
-                            <textarea id="ownerBioInput" rows="4" placeholder="Developer description used by AI assistant..."></textarea>
+                        <div class="form-group">
+                            <label class="form-label" for="botPrefixSelect">COMMAND PREFIX</label>
+                            <select id="botPrefixSelect" class="form-select" onchange="saveImmediateSetting('prefix', this.value)">
+                                <option value=".">.</option>
+                                <option value="!">!</option>
+                                <option value="-">-</option>
+                                <option value=",">,</option>
+                                <option value="$">$</option>
+                                <option value="*">*</option>
+                                <option value="#">#</option>
+                                <option value="/">/</option>
+                                <option value="?">?</option>
+                                <option value=":">:</option>
+                            </select>
                         </div>
                     </div>
                 </div>
 
-                <div style="text-align: right; margin-top: 1rem;">
-                    <button class="btn" onclick="saveProfileSettings()">💾 SAVE PROFILE SETTINGS</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==============================================
-             06 SECURITY & CLOUD TAB
-             ============================================== -->
-        <div id="tab-security" class="tab-content">
-            <div class="card-grid">
-                <!-- Change Password -->
-                <div class="card">
-                    <h2 class="card-title">🔒 Change Panel Password</h2>
-                    <p class="card-desc">Passwords are hashed using bcrypt. Zero plain-text credentials stored.</p>
-
-                    <div class="input-group">
-                        <label class="input-label">New Panel Password:</label>
-                        <input type="password" id="newPasswordInput" placeholder="Enter new password (min 4 chars)">
+                <!-- Section: Bot Profile (Matches Screenshot 550) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Bot profile</h2>
+                            <p class="card-desc">Personalize the bot name and command artwork for this paired account only.</p>
+                        </div>
+                        <span class="badge-pill">PER BOT</span>
                     </div>
 
-                    <button class="btn" onclick="changePassword()">🔑 UPDATE PASSWORD</button>
+                    <div style="display: grid; grid-template-columns: 240px 1fr; gap: 2rem; align-items: start;">
+                        <!-- Logo Frame -->
+                        <div style="position: relative; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-subtle); background: #000; aspect-ratio: 1; display: flex; align-items: center; justify-content: center;">
+                            <img src="/assets/bot_icon.jpg" id="botLogoPreview" alt="Custom Logo" style="width: 100%; height: 100%; object-fit: cover;">
+                            <span class="badge-pill" style="position: absolute; bottom: 0.75rem; left: 0.75rem; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);">CUSTOM LOGO</span>
+                        </div>
+
+                        <!-- Profile Form -->
+                        <div>
+                            <div class="form-group" style="margin-bottom: 1.25rem;">
+                                <label class="form-label" for="botNameInput">BOT NAME</label>
+                                <input type="text" id="botNameInput" class="form-input" placeholder="GAARA X MD">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label class="form-label" for="botLogoFileInput">BOT LOGO</label>
+                                <input type="file" id="botLogoFileInput" class="form-input" accept="image/jpeg,image/png,image/webp" onchange="handleLogoFileSelect(event)">
+                                <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Choose JPEG, PNG, or WebP - max 5 MB</span>
+                            </div>
+
+                            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                <button type="button" class="btn-primary" onclick="saveBotProfile()">Save bot profile</button>
+                                <button type="button" class="btn-dark" onclick="resetDefaultLogo()">Use default logo</button>
+                            </div>
+
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
+                                Footer and official newsletter branding are permanently protected and cannot be changed.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Cloudflare D1 Sync -->
-                <div class="card">
-                    <h2 class="card-title">☁️ Cloudflare D1 Database Sync</h2>
-                    <p class="card-desc">
-                        Persistent cloud backup powered by Cloudflare Worker (<code>ofc</code>) and D1 database.
-                        Settings are never deleted upon unlinking/logout and automatically restore upon pairing!
+                <!-- Section: Auto Call Voice (Matches Screenshots 550, 551) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Auto Call Voice</h2>
+                            <p class="card-desc">Upload the audio played inside genuine incoming voice calls. Enabled calls are answered immediately when the VoIP engine is ready.</p>
+                        </div>
+                        <span class="badge-pill">VOICE ONLY</span>
+                    </div>
+
+                    <div class="toggle-row" style="background: rgba(255,255,255,0.02); padding: 1rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto Call Answer Mode</div>
+                            <div class="toggle-desc">Automatically answer direct Voice calls for this account.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoCallAnswer" onchange="saveImmediateSetting('autoCallAnswerMode', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem;">
+                        <span style="font-size: 1.5rem;">🎧</span>
+                        <div>
+                            <div style="font-size: 0.92rem; font-weight: 700; color: #fff;" id="voiceStatusTitle">No voice file saved</div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted);">Upload MP3 or WAV, or reply to audio with .autocallvoice</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 1.25rem;">
+                        <label class="form-label" for="voiceFileInput">Voice file</label>
+                        <input type="file" id="voiceFileInput" class="form-input" accept="audio/mp3,audio/wav,audio/mpeg,audio/ogg" onchange="handleVoiceFileSelect(event)">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Choose MP3/WAV &le; 15 MB &le; 5 min</span>
+                    </div>
+
+                    <button type="button" class="btn-primary" onclick="uploadVoiceFile()">Save voice file</button>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.75rem;">
+                        Video media stays command-only: reply to an MP4 with .autocallvideo.
                     </p>
+                </div>
 
-                    <div style="display: flex; gap: 0.8rem; margin-top: 1.5rem; flex-wrap: wrap;">
-                        <button class="btn btn-secondary" onclick="pullFromCloudflare()">☁️ Restore from Cloudflare D1</button>
-                        <button class="btn" onclick="pushToCloudflare()">☁️ Push Backup to Cloudflare D1</button>
+                <!-- Section: Automation Toggles (Matches Screenshots 552, 553) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Automation</h2>
+                            <p class="card-desc">Fine-tune automatic actions and interaction behavior.</p>
+                        </div>
+                        <span class="badge-pill green">LIVE</span>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Anti call</div>
+                            <div class="toggle-desc">Reject calls, send three warnings, then block the fourth attempt.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAntiCall" onchange="saveImmediateSetting('antiCall', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto status view</div>
+                            <div class="toggle-desc">Automatically mark new status posts as viewed.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoStatusView" onchange="saveImmediateSetting('autoStatusView', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto status like</div>
+                            <div class="toggle-desc">View and react to every incoming status update.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoStatusLike" onchange="saveImmediateSetting('autoStatusLike', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Command reactions</div>
+                            <div class="toggle-desc">React instantly when a command is received.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleCommandReactions" onchange="saveImmediateSetting('commandReactions', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto typing</div>
+                            <div class="toggle-desc">Show typing presence while processing commands.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoTyping" onchange="saveImmediateSetting('autoTyping', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto recording</div>
+                            <div class="toggle-desc">Show recording presence while processing commands.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoRecording" onchange="saveImmediateSetting('autoRecording', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Always Online</div>
+                            <div class="toggle-desc">Keep your WhatsApp account visibly online at all times. Default: Off, so bot activity does not change your online presence.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAlwaysOnline" onchange="saveImmediateSetting('alwaysOnline', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Button mode</div>
+                            <div class="toggle-desc">Enable native lists and modern quick actions.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleButtonMode" onchange="saveImmediateSetting('buttonMode', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Anti bug</div>
+                            <div class="toggle-desc">Block oversized and malformed messages.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAntiBug" onchange="saveImmediateSetting('antiBug', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row" style="flex-direction: column; align-items: stretch;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="toggle-info">
+                                <div class="toggle-title">Anti-delete</div>
+                                <div class="toggle-desc">Restore messages that other people delete after sending.</div>
+                            </div>
+                            <label class="switch-control">
+                                <input type="checkbox" id="toggleAntiDelete" onchange="saveImmediateSetting('antiDelete', this.checked)">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Nested Restore Destination (Matches Screenshot 553) -->
+                        <div style="margin-top: 1rem; background: var(--bg-card-subtle); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <div>
+                                <div style="font-size: 0.9rem; font-weight: 700; color: #fff;">Restore destination</div>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">
+                                    Choose where deleted photos, videos, audio, stickers, messages, and files are restored.
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                                    Deleted content is delivered privately to your own Message Yourself chat.
+                                </div>
+                            </div>
+                            <select id="antiDeleteDestSelect" class="form-select" style="max-width: 180px;" onchange="saveImmediateSetting('antiDeleteDestination', this.value)">
+                                <option value="self">Self Chat</option>
+                                <option value="same">Same Chat</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-title">Auto Reply</div>
+                            <div class="toggle-desc">Read and reply naturally to private text and image messages in the sender's style.</div>
+                        </div>
+                        <label class="switch-control">
+                            <input type="checkbox" id="toggleAutoReply" onchange="saveImmediateSetting('autoReply', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
                     </div>
                 </div>
 
-                <!-- Vercel Deployment Configuration -->
-                <div class="card" style="grid-column: 1 / -1;">
-                    <h2 class="card-title">🚀 Vercel & Multi-Cloud Deployment</h2>
-                    <p class="card-desc">
-                        When deploying the web dashboard on Vercel, set your WhatsApp bot backend URL below (Render, VPS, or Cloudflare Worker).
-                        Leave empty if hosted together on the same origin.
-                    </p>
-
-                    <div class="input-group">
-                        <label class="input-label">Backend Bot API URL (Optional for Vercel):</label>
-                        <input type="text" id="apiBaseUrlInput" placeholder="e.g. https://gaara-x-md.onrender.com or leave blank">
+                <!-- Section: Anti Call Messages (Matches Screenshot 553) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Anti Call messages</h2>
+                            <p class="card-desc">Customize the warning and automatic-block messages for this paired account. Bot name and official footer stay protected.</p>
+                        </div>
+                        <span class="badge-pill">PER BOT</span>
                     </div>
 
-                    <button class="btn btn-secondary" onclick="saveApiBaseUrl()">💾 SAVE BACKEND URL</button>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="callWarningText">WARNING MESSAGE</label>
+                            <textarea id="callWarningText" class="form-textarea" rows="4"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="callBlockedText">BLOCKED MESSAGE</label>
+                            <textarea id="callBlockedText" class="form-textarea" rows="4"></textarea>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                        <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Available placeholders:</span>
+                            <span class="placeholder-tag" onclick="insertPlaceholder('{warning}')">{warning}</span>
+                            <span class="placeholder-tag" onclick="insertPlaceholder('{remaining}')">{remaining}</span>
+                            <span class="placeholder-tag" onclick="insertPlaceholder('{remaining_text}')">{remaining_text}</span>
+                            <span class="placeholder-tag" onclick="insertPlaceholder('{caller}')">{caller}</span>
+                            <span class="placeholder-tag" onclick="insertPlaceholder('{bot_name}')">{bot_name}</span>
+                        </div>
+
+                        <button type="button" class="btn-primary" onclick="saveAntiCallTemplates()">Save call templates</button>
+                    </div>
+                </div>
+
+                <!-- Section: Status Reaction (Matches Screenshot 554) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Status reaction</h2>
+                            <p class="card-desc">Choose the emoji used by Status Auto Like. The default is 🎀.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; max-width: 400px;">
+                        <input type="text" id="statusEmojiInput" class="form-input" placeholder="🎀" style="font-size: 1.25rem;">
+                        <button type="button" class="btn-primary" onclick="saveImmediateSetting('autoStatusEmoji', document.getElementById('statusEmojiInput').value)">Save emoji</button>
+                    </div>
+                </div>
+
+                <!-- Section: Auto Reply Profile (Matches Screenshot 554) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Auto Reply profile</h2>
+                            <p class="card-desc">Optional details that help replies sound like you while matching each sender's language and writing style.</p>
+                        </div>
+                        <span class="badge-pill">OPTIONAL</span>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label class="form-label" for="ownerProfileText">OWNER PROFILE</label>
+                        <textarea id="ownerProfileText" class="form-textarea" rows="4" maxlength="3000" placeholder="Example: My name is GAARA. I run an automated technology service in Sri Lanka. Reply politely and keep answers short." oninput="updateProfileCount()"></textarea>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;"><span id="profileCharCount">0</span>/3000 characters - Leave blank to use the natural default style.</span>
+                    </div>
+
+                    <button type="button" class="btn-primary" onclick="saveImmediateSetting('ownerProfile', document.getElementById('ownerProfileText').value)">Save profile</button>
+                </div>
+
+                <!-- Section: Auto Reply Blacklist (Matches Screenshots 554, 555) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Auto Reply blacklist</h2>
+                            <p class="card-desc">Auto Reply never reads or answers private messages from these numbers.</p>
+                        </div>
+                        <span class="badge-pill red">BLOCKED</span>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; max-width: 480px; margin-bottom: 1.25rem;">
+                        <input type="text" id="blacklistInput" class="form-input" placeholder="94771234567">
+                        <button type="button" class="btn-primary" onclick="addBlacklistNumber()">Add number</button>
+                    </div>
+
+                    <div id="blacklistContainer" style="color: var(--text-secondary); font-size: 0.88rem;">
+                        No numbers have been blacklisted.
+                    </div>
+                </div>
+
+                <!-- Section: Smart Custom Replies Registry -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Smart Auto-Replies</h2>
+                            <p class="card-desc">Respond to specific keyword triggers automatically.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 120px auto; gap: 0.75rem; margin-bottom: 1.25rem;">
+                        <input type="text" id="newReplyTrigger" class="form-input" placeholder="Trigger (e.g. price)">
+                        <input type="text" id="newReplyResponse" class="form-input" placeholder="Response text">
+                        <select id="newReplyMatch" class="form-select">
+                            <option value="contains">Contains</option>
+                            <option value="exact">Exact</option>
+                            <option value="regex">Regex</option>
+                        </select>
+                        <button type="button" class="btn-primary" onclick="addCustomReply()">+ Add</button>
+                    </div>
+
+                    <div id="repliesListContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <!-- Rendered dynamically -->
+                    </div>
                 </div>
             </div>
-        </div>
-    </main>
 
-    <!-- Modal for Login -->
-    <div id="loginModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="logo-badge" style="display: inline-block; margin-bottom: 1rem;">⚡ GAARA X MD</div>
-            <h2 style="color: #fff; margin-bottom: 0.5rem;">Panel Authentication</h2>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
-                Enter your admin password (sent to your WhatsApp upon linking, or configured in .env).
-            </p>
+            <!-- =============================================================
+                 TAB 02: SCHEDULES (Screenshots 555, 556)
+                 ============================================================= -->
+            <div id="tab-schedules" class="tab-page">
+                <!-- Section: One-time scheduled message -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">One-time scheduled message</h2>
+                            <p class="card-desc">Send text and an optional image once to a number, channel link or JID, or group invite link.</p>
+                        </div>
+                        <span class="badge-pill green">Asia/Colombo</span>
+                    </div>
 
-            <div class="input-group">
-                <input type="password" id="panelPasswordInput" placeholder="Enter Panel Password" style="text-align: center; font-size: 1.1rem;">
+                    <form onsubmit="handleCreateSchedule(event, 'once')">
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="onceDest">DESTINATION</label>
+                            <input type="text" id="onceDest" class="form-input" placeholder="94771234567, channel JID/link, or group link" required>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="onceMsg">MESSAGE</label>
+                            <textarea id="onceMsg" class="form-textarea" rows="3" required></textarea>
+                        </div>
+
+                        <div class="form-grid-2" style="margin-bottom: 1.5rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="onceDateTime">DATE AND TIME</label>
+                                <input type="datetime-local" id="onceDateTime" class="form-input" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="onceImg">OPTIONAL IMAGE</label>
+                                <input type="file" id="onceImg" class="form-input" accept="image/*">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary">Create one-time schedule</button>
+                    </form>
+                </div>
+
+                <!-- Section: Daily Automation Chat Schedule System (Screenshot 556) -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Daily Automation Chat Schedule System</h2>
+                            <p class="card-desc">Send a message every day at the selected time between your start and end dates.</p>
+                        </div>
+                        <span class="badge-pill green">DAILY</span>
+                    </div>
+
+                    <form onsubmit="handleCreateSchedule(event, 'daily')">
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="dailyDest">DESTINATION</label>
+                            <input type="text" id="dailyDest" class="form-input" placeholder="94771234567, channel JID/link, or group link" required>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="dailyMsg">MESSAGE</label>
+                            <textarea id="dailyMsg" class="form-textarea" rows="3" required></textarea>
+                        </div>
+
+                        <div class="form-grid-2" style="margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="dailyStartDate">START DATE</label>
+                                <input type="date" id="dailyStartDate" class="form-input" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="dailyEndDate">END DATE</label>
+                                <input type="date" id="dailyEndDate" class="form-input" required>
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2" style="margin-bottom: 1.5rem;">
+                            <div class="form-group">
+                                <label class="form-label" for="dailyTime">DAILY TIME</label>
+                                <input type="time" id="dailyTime" class="form-input" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="dailyImg">OPTIONAL IMAGE</label>
+                                <input type="file" id="dailyImg" class="form-input" accept="image/*">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary">Create daily schedule</button>
+                    </form>
+
+                    <!-- Active Schedules List -->
+                    <div style="margin-top: 2rem;">
+                        <h4 style="font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 0.75rem;">Scheduled Tasks</h4>
+                        <div id="schedulesListContainer" style="color: var(--text-muted); font-size: 0.88rem;">
+                            No daily automations scheduled.
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="input-group" style="margin-top: 1.2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem; text-align: left;">
-                <label class="input-label" style="font-size: 0.8rem; color: var(--text-secondary);">🌐 Backend Bot API URL (Required if hosted on Vercel):</label>
-                <input type="text" id="loginApiBaseUrlInput" placeholder="e.g. https://gaara-x-md.onrender.com or leave blank" style="font-size: 0.9rem;">
-            </div>
+            <!-- =============================================================
+                 TAB 03: CONNECTION (Screenshot 556, 557)
+                 ============================================================= -->
+            <div id="tab-connection" class="tab-page">
+                <!-- Section: Panel Security -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Panel security</h2>
+                            <p class="card-desc">Replace your generated password with a private password of 8 to 64 characters.</p>
+                        </div>
+                    </div>
 
-            <button class="btn" onclick="handleLogin()" style="width: 100%;">
-                🔓 UNLOCK DASHBOARD
-            </button>
-        </div>
+                    <form onsubmit="handlePasswordChange(event)" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+                        <div class="form-group">
+                            <label class="form-label" for="currentPass">CURRENT PASSWORD</label>
+                            <input type="password" id="currentPass" class="form-input" placeholder="Current password" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="newPass">NEW PASSWORD</label>
+                            <input type="password" id="newPass" class="form-input" placeholder="New password (8-64 chars)" required minlength="8" maxlength="64">
+                        </div>
+
+                        <button type="submit" class="btn-primary" style="height: 48px;">Update password</button>
+                    </form>
+                </div>
+
+                <!-- Section: Connection Status & Recovery Engine -->
+                <div class="card-section">
+                    <div class="card-header-row">
+                        <div>
+                            <h2 class="card-title">Connection</h2>
+                            <p class="card-desc">Your bot session is managed by the 24/7 recovery engine.</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="status-dot" id="connSocketDot"></span>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.9rem; font-weight: 700; color: #fff;" id="connSocketText">Online</div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted);">Automatic reconnect enabled</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem;">
+                        <button type="button" class="btn-primary" onclick="restartBot()">🔄 Restart Bot Engine</button>
+                        <button type="button" class="btn-dark" style="border-color: var(--neon-red); color: var(--neon-red);" onclick="disconnectBot()">⚠️ Disconnect Session</button>
+                        <button type="button" class="btn-dark" onclick="syncCloudflare('pull')">☁️ Pull from Cloudflare D1</button>
+                        <button type="button" class="btn-dark" onclick="syncCloudflare('push')">☁️ Push to Cloudflare D1</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Official Footer -->
+        <footer class="site-footer">
+            <div class="container">
+                <div class="footer-top-grid">
+                    <div class="footer-brand-box">
+                        <div class="footer-brand-pill">GXM</div>
+                        <div>
+                            <div class="footer-brand-title">GAARA X MD</div>
+                            <p class="footer-brand-bio">Powerful WhatsApp automation, designed for speed.</p>
+                        </div>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Product</div>
+                        <a href="/pair" class="footer-col-link">Pair bot</a>
+                        <a href="/settings" class="footer-col-link">Settings</a>
+                        <a href="/status" class="footer-col-link">Status</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Company</div>
+                        <a href="/about" class="footer-col-link">About</a>
+                        <a href="/reviews" class="footer-col-link">Reviews</a>
+                        <a href="https://whatsapp.com/channel/gaaraxmd" target="_blank" rel="noopener" class="footer-col-link">Support</a>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <div class="footer-col-header">Legal</div>
+                        <a href="#" class="footer-col-link">Privacy</a>
+                        <a href="#" class="footer-col-link">Terms</a>
+                        <a href="#" class="footer-col-link">Cookies</a>
+                    </div>
+                </div>
+
+                <div class="footer-bottom-row">
+                    <div>&copy; 2026 GAARA DEV OFC</div>
+                    <div>Built in Sri Lanka</div>
+                </div>
+            </div>
+        </footer>
     </div>
 
-    <div id="toast"></div>
-
-    <footer>
-        GAARA X MD &bull; Built by GAARA DEV OFC &bull; Pure ESM
-    </footer>
+    <!-- Toast Notification -->
+    <div id="toastNotification" style="display: none; position: fixed; bottom: 2rem; right: 2rem; background: #160a12; border: 1px solid var(--neon-red); color: #fff; padding: 1rem 1.5rem; border-radius: var(--radius-md); box-shadow: 0 8px 25px rgba(255,42,95,0.4); z-index: 2000;">
+        <span id="toastMessage"></span>
+    </div>
 
     <script src="/js/app.js"></script>
 </body>

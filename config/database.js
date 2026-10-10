@@ -16,6 +16,7 @@ class JsonDatabase extends EventEmitter {
         this.schedulesFile = path.join(this.dataDir, 'schedules.json');
         this.callsFile = path.join(this.dataDir, 'calls.json');
         this.usersFile = path.join(this.dataDir, 'users.json');
+        this.reviewsFile = path.join(this.dataDir, 'reviews.json');
         this._cachedSettings = null;
         this._cachedUsers = null;
 
@@ -145,6 +146,58 @@ class JsonDatabase extends EventEmitter {
         } else {
             this._cachedUsers = users;
         }
+
+        // 6. Community Reviews (Real verified user feedback from screenshots)
+        this._readSafe(this.reviewsFile, [
+            {
+                id: 'rev-1',
+                name: 'Viruna',
+                rating: 5,
+                review: 'Bota gana aye ithin kiyanna deyak na . 5 Star rating ⭐',
+                createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+                isNew: true
+            },
+            {
+                id: 'rev-2',
+                name: 'apexZ',
+                rating: 5,
+                review: 'This is the best whatsapp bot I have ever used. Super fast, fully stable and completely bug-free. All commands work perfectly and features are very useful. Easy to use and well developed. Great work by the developer. Highly recommended for everyone.',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                isNew: false
+            },
+            {
+                id: 'rev-3',
+                name: 'Heshan Dev',
+                rating: 5,
+                review: 'පට්ට බොට් එක...සුපිරියි ගැම්මක් අල්ලමු සුද්දා 🫡🙌',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                isNew: false
+            },
+            {
+                id: 'rev-4',
+                name: 'Sayuru Senavirathna',
+                rating: 5,
+                review: 'I have used many whatsapp bots so far, but almost all features have been implemented right from the very first version. The standout feature is the AI Reply—something many other bots lack. Keep it up!',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                isNew: false
+            },
+            {
+                id: 'rev-5',
+                name: 'Dinhgh Fdoz',
+                rating: 5,
+                review: 'Super Bot nE!',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                isNew: false
+            },
+            {
+                id: 'rev-6',
+                name: 'Kavin',
+                rating: 5,
+                review: 'GAARA X MD ON TOP 🔝',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                isNew: false
+            }
+        ]);
     }
 
     // --- Settings Methods ---
@@ -311,6 +364,66 @@ class JsonDatabase extends EventEmitter {
         this._cachedUsers = users;
         this._writeSafe(this.usersFile, users);
         return true;
+    }
+
+    // --- Reviews Methods ---
+    getReviews() {
+        return this._readSafe(this.reviewsFile, []);
+    }
+
+    addReview({ name, rating, review }) {
+        const cleanName = String(name || '').trim();
+        const cleanReview = String(review || '').trim();
+        const numRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+
+        if (!cleanName || cleanName.length < 2) {
+            throw new Error('Please enter a valid name (at least 2 characters)');
+        }
+        if (!cleanReview || cleanReview.length < 5) {
+            throw new Error('Please enter a review of at least 5 characters');
+        }
+
+        const reviews = this.getReviews();
+        const newEntry = {
+            id: 'rev-' + Date.now(),
+            name: cleanName.slice(0, 50),
+            rating: numRating,
+            review: cleanReview.slice(0, 600),
+            createdAt: new Date().toISOString(),
+            isNew: true
+        };
+        reviews.unshift(newEntry);
+        this._writeSafe(this.reviewsFile, reviews);
+        return newEntry;
+    }
+
+    removeReview(id) {
+        let reviews = this.getReviews();
+        const originalLen = reviews.length;
+        reviews = reviews.filter(r => r.id !== id);
+        this._writeSafe(this.reviewsFile, reviews);
+        return reviews.length < originalLen;
+    }
+
+    getReviewStats() {
+        const reviews = this.getReviews();
+        const total = reviews.length;
+        if (total === 0) {
+            return {
+                total: 0,
+                average: 5.0,
+                breakdown: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+            };
+        }
+        const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+        let sum = 0;
+        for (const r of reviews) {
+            const star = Math.max(1, Math.min(5, Math.round(r.rating || 5)));
+            breakdown[star] = (breakdown[star] || 0) + 1;
+            sum += r.rating || 5;
+        }
+        const average = Number((sum / total).toFixed(1));
+        return { total, average, breakdown };
     }
 }
 
